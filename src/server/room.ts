@@ -1,0 +1,1073 @@
+import { nanoid } from 'nanoid';
+import { cardLabel, isSevenTwo } from '../shared/cards';
+import { buildQueuedMode, mergeMode, modeLabel, validateMode } from '../shared/modes';
+import { cleanChat, cleanName, clampInt } from '../shared/sanitize';
+import type {
+  AuditEntry,
+  Card,
+  ChatEntry,
+  ClientToServerEvents,
+  CustomModeName,
+  HandPhase,
+  HandPublic,
+  LegalActions,
+  PlayerPublic,
+  PrivateState,
+  QueuedCustomMode,
+  RoomPublicState,
+  RoomSettings,
+  ServerSnapshot,
+  SocketResult,
+  Variant
+} from '../shared/types';
+import { shuffleDeck } from './deck';
+import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
+
+type PlayerStatus = PlayerPublic['status'];
+
+interface PlayerInternal {
+  id: string;
+  sessionToken: string;
+  socketIds: Set<string>;
+  name: string;
+  isHost: boolean;
+  muted: boolean;
+  banned: boolean;
+  spectator: boolean;
+  seat: number | null;
+  stack: number;
+  buyInTotal: number;
+  cashOut: number;
+  ready: boolean;
+  status: PlayerStatus;
+  missedSmallBlind: boolean;
+  missedBigBlind: boolean;
+  pendingChipRequest?: { amount: number; reason: string; at: number };
+  chatTimestamps: number[];
+  actionTimestamps: number[];
+  lastCustomHand: number;
+}
+
+interface ParticipantInternal {
+  playerId: string;
+  seat: number;
+  holeCards: Card[];
+  currentBet: number;
+  committedThisHand: number;
+  folded: boolean;
+  allIn: boolean;
+  acted: boolean;
+  timedOut: boolean;
+}
+
+interface HandInternal extends HandPublic {
+  deck: Card[];
+  shuffleSeed: string;
+  participants: Map<number, ParticipantInternal>;
+}
+
+interface RoomInternal {
+  code: string;
+  createdAt: number;
+  hostId: string;
+  lifecycle: RoomPublicState['lifecycle'];
+  settings: RoomSettings;
+  players: Map<string, PlayerInternal>;
+  seats: Array<string | null>;
+  audit: AuditEntry[];
+  chat: ChatEntry[];
+  hand: HandInternal | null;
+  queuedMode: QueuedCustomMode | null;
+  nextHandNumber: number;
+  lastButtonSeat: number | null;
+  bannedTokens: Set<string>;
+  endedExport?: { exportText: string; exportJson: string };
+}
+
+export const rooms = new Map<string, RoomInternal>();
+
+export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
+  return {
+    roomName,
+    smallBlind: 5,
+    bigBlind: 10,
+    ante: 0,
+    buyIn: 1000,
+    startingStack: 1000,
+    minSeats: 2,
+    maxSeats: 9,
+    actionTimerSeconds: 30,
+    autoApproveChips: false,
+    selfServiceChips: true,
+    chipMode: 'strict',
+    locked: false,
+    spectatorsAllowed: true,
+    straddle: {
+      enabled: true,
+      amount: 20,
+      mode: 'utg',
+      restraddleCap: 1
+    },
+    custom: {
+      enabled: true,
+      permission: 'everyone_once_per_orbit',
+      cooldownHands: 4,
+      allowedModes: ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two']
+    },
+    sevenTwo: {
+      enabled: true,
+      bounty: 25,
+      showdownOnly: false,
+      suitedBonus: 25
+    },
+    runItTwice: false,
+    largeBetThresholdPct: 75
+  };
+}
+
+function makeCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+}
+
+function audit(room: RoomInternal, type: string, message: string, actor?: string, data?: Record<string, unknown>): void {
+  room.audit.push({ id: nanoid(8), at: Date.now(), type, actor, message, data });
+  if (room.audit.length > 1200) room.audit.splice(0, room.audit.length - 1200);
+}
+
+function systemChat(room: RoomInternal, message: string, playerId = 'system'): void {
+  room.chat.push({ id: nanoid(8), at: Date.now(), playerId, playerName: 'Table', message, system: true });
+  if (room.chat.length > 250) room.chat.splice(0, room.chat.length - 250);
+}
+
+function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic {
+  const participant = room.hand && player.seat !== null ? room.hand.participants.get(player.seat) : null;
+  const badges: string[] = [];
+  if (player.isHost) badges.push('Host');
+  if (room.hand?.buttonSeat === player.seat) badges.push('D');
+  if (room.hand?.smallBlindSeat === player.seat) badges.push('SB');
+  if (room.hand?.bigBlindSeat === player.seat) badges.push('BB');
+  if (room.hand?.straddleSeat === player.seat) badges.push('Straddle');
+  if (player.pendingChipRequest) badges.push('Chip request');
+
+  return {
+    id: player.id,
+    name: player.name,
+    isHost: player.isHost,
+    connected: player.socketIds.size > 0,
+    muted: player.muted,
+    banned: player.banned,
+    seat: player.seat,
+    stack: player.stack,
+    buyInTotal: player.buyInTotal,
+    cashOut: player.cashOut,
+    upDown: player.stack + player.cashOut - player.buyInTotal,
+    ready: player.ready,
+    status: player.status,
+    currentBet: participant?.currentBet ?? 0,
+    committedThisHand: participant?.committedThisHand ?? 0,
+    folded: participant?.folded ?? false,
+    allIn: participant?.allIn ?? false,
+    badges,
+    missedSmallBlind: player.missedSmallBlind,
+    missedBigBlind: player.missedBigBlind
+  };
+}
+
+function publicHand(hand: HandInternal | null): HandPublic | null {
+  if (!hand) return null;
+  const { deck: _deck, shuffleSeed: _seed, participants: _participants, ...visible } = hand;
+  return { ...visible };
+}
+
+export function publicState(room: RoomInternal): RoomPublicState {
+  return {
+    code: room.code,
+    createdAt: room.createdAt,
+    hostId: room.hostId,
+    lifecycle: room.lifecycle,
+    settings: room.settings,
+    players: [...room.players.values()].map((player) => publicPlayer(room, player)),
+    seats: room.seats,
+    audit: room.audit.slice(-250),
+    chat: room.chat.slice(-120),
+    hand: publicHand(room.hand),
+    queuedMode: room.queuedMode,
+    exportWarning: 'Play-money room state is in memory only. Export before ending the session or closing the server.'
+  };
+}
+
+export function privateState(room: RoomInternal, player: PlayerInternal | null): PrivateState | null {
+  if (!player) return null;
+  const participant = room.hand && player.seat !== null ? room.hand.participants.get(player.seat) : null;
+  const legalActions = participant ? legalActionsFor(room, player) : emptyLegalActions();
+  return {
+    playerId: player.id,
+    roomCode: room.code,
+    sessionToken: player.sessionToken,
+    holeCards: participant?.holeCards ?? [],
+    legalActions,
+    mustConfirmLargeBet: false,
+    reconnectTokenValid: true
+  };
+}
+
+export function snapshot(room: RoomInternal, playerId?: string): ServerSnapshot {
+  return {
+    publicState: publicState(room),
+    privateState: privateState(room, playerId ? room.players.get(playerId) ?? null : null)
+  };
+}
+
+function emptyLegalActions(): LegalActions {
+  return {
+    canFold: false,
+    canCheck: false,
+    canCall: false,
+    callAmount: 0,
+    canBet: false,
+    canRaise: false,
+    minBet: 0,
+    minRaiseTo: 0,
+    maxBet: 0,
+    allInAmount: 0,
+    potSize: 0
+  };
+}
+
+function findByToken(room: RoomInternal, sessionToken?: string): PlayerInternal | null {
+  if (!sessionToken) return null;
+  return [...room.players.values()].find((player) => player.sessionToken === sessionToken) ?? null;
+}
+
+export function createRoom(nameInput: string, roomNameInput?: string): SocketResult<{ code: string; playerId: string; sessionToken: string }> {
+  const name = cleanName(nameInput);
+  if (!name) return { ok: false, error: 'Enter a display name.' };
+  let code = makeCode();
+  while (rooms.has(code)) code = makeCode();
+
+  const player: PlayerInternal = {
+    id: nanoid(10),
+    sessionToken: nanoid(24),
+    socketIds: new Set(),
+    name,
+    isHost: true,
+    muted: false,
+    banned: false,
+    spectator: false,
+    seat: null,
+    stack: defaultSettings().startingStack,
+    buyInTotal: defaultSettings().buyIn,
+    cashOut: 0,
+    ready: true,
+    status: 'seated',
+    missedSmallBlind: false,
+    missedBigBlind: false,
+    chatTimestamps: [],
+    actionTimestamps: [],
+    lastCustomHand: -999
+  };
+
+  const settings = defaultSettings(cleanName(roomNameInput ?? '') || 'Private Felt');
+  const room: RoomInternal = {
+    code,
+    createdAt: Date.now(),
+    hostId: player.id,
+    lifecycle: 'lobby',
+    settings,
+    players: new Map([[player.id, player]]),
+    seats: Array.from({ length: settings.maxSeats }, () => null),
+    audit: [],
+    chat: [],
+    hand: null,
+    queuedMode: null,
+    nextHandNumber: 1,
+    lastButtonSeat: null,
+    bannedTokens: new Set()
+  };
+  rooms.set(code, room);
+  audit(room, 'room.created', `${name} created room ${code}`, player.id, { playMoneyOnly: true, noDatabase: true });
+  systemChat(room, 'Private play-money room created. No deposits, withdrawals, rake, or real-money settlement.');
+  return { ok: true, code, playerId: player.id, sessionToken: player.sessionToken };
+}
+
+export function joinRoom(
+  codeInput: string,
+  nameInput: string,
+  password?: string,
+  sessionToken?: string,
+  spectator = false
+): SocketResult<{ code: string; playerId: string; sessionToken: string }> {
+  const code = codeInput.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const room = rooms.get(code);
+  if (!room) return { ok: false, error: 'Room not found.' };
+  if (room.settings.locked && !sessionToken) return { ok: false, error: 'Room is locked.' };
+  if (room.settings.password && room.settings.password !== password) return { ok: false, error: 'Wrong room password.' };
+  if (sessionToken && room.bannedTokens.has(sessionToken)) return { ok: false, error: 'This browser is banned from the room.' };
+  if (spectator && !room.settings.spectatorsAllowed) return { ok: false, error: 'Spectators are off.' };
+
+  const existing = findByToken(room, sessionToken);
+  if (existing) {
+    existing.status = existing.seat === null ? 'seated' : existing.status === 'disconnected' ? 'seated' : existing.status;
+    audit(room, 'player.reconnected', `${existing.name} reconnected`, existing.id);
+    return { ok: true, code, playerId: existing.id, sessionToken: existing.sessionToken };
+  }
+
+  const name = cleanName(nameInput);
+  if (!name) return { ok: false, error: 'Enter a display name.' };
+  if (room.players.size >= 16) return { ok: false, error: 'Room is full.' };
+
+  const player: PlayerInternal = {
+    id: nanoid(10),
+    sessionToken: nanoid(24),
+    socketIds: new Set(),
+    name,
+    isHost: false,
+    muted: false,
+    banned: false,
+    spectator,
+    seat: null,
+    stack: spectator ? 0 : room.settings.startingStack,
+    buyInTotal: spectator ? 0 : room.settings.buyIn,
+    cashOut: 0,
+    ready: false,
+    status: spectator ? 'sitting_out' : 'seated',
+    missedSmallBlind: false,
+    missedBigBlind: false,
+    chatTimestamps: [],
+    actionTimestamps: [],
+    lastCustomHand: -999
+  };
+  room.players.set(player.id, player);
+  audit(room, spectator ? 'spectator.joined' : 'player.joined', `${name} joined ${spectator ? 'as spectator' : 'the lobby'}`, player.id);
+  return { ok: true, code, playerId: player.id, sessionToken: player.sessionToken };
+}
+
+export function attachSocket(room: RoomInternal, playerId: string, socketId: string): void {
+  room.players.get(playerId)?.socketIds.add(socketId);
+}
+
+export function detachSocket(socketId: string): RoomInternal[] {
+  const changed: RoomInternal[] = [];
+  rooms.forEach((room) => {
+    room.players.forEach((player) => {
+      if (player.socketIds.delete(socketId)) {
+        if (player.socketIds.size === 0) {
+          player.status = player.seat === null ? player.status : 'disconnected';
+          audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
+        }
+        changed.push(room);
+      }
+    });
+    if ([...room.players.values()].every((player) => player.socketIds.size === 0)) {
+      audit(room, 'room.empty', 'All browsers disconnected. Room remains only while the server process is alive.');
+    }
+  });
+  return changed;
+}
+
+export function getRoom(code: string): RoomInternal | undefined {
+  return rooms.get(code);
+}
+
+export function playerInRoom(room: RoomInternal, playerId: string): PlayerInternal | undefined {
+  return room.players.get(playerId);
+}
+
+function requireHost(room: RoomInternal, player: PlayerInternal): { ok: false; error: string } | null {
+  if (room.hostId !== player.id || !player.isHost) return { ok: false, error: 'Only the host can do that.' };
+  return null;
+}
+
+export function updateSettings(room: RoomInternal, player: PlayerInternal, patch: Partial<RoomSettings>): SocketResult {
+  const hostError = requireHost(room, player);
+  if (hostError) return hostError;
+  if (room.lifecycle === 'playing' && room.hand && room.hand.phase !== 'complete') {
+    audit(room, 'settings.deferred_rejected', 'Rejected mid-hand setting change; pause or wait for next hand.', player.id);
+    return { ok: false, error: 'Setting changes apply between hands. Pause or finish the hand first.' };
+  }
+
+  const current = room.settings;
+  const next: RoomSettings = {
+    ...current,
+    ...patch,
+    roomName: cleanName(patch.roomName ?? current.roomName) || current.roomName,
+    smallBlind: clampInt(patch.smallBlind, 1, 100000, current.smallBlind),
+    bigBlind: clampInt(patch.bigBlind, 2, 200000, current.bigBlind),
+    ante: clampInt(patch.ante, 0, 100000, current.ante),
+    buyIn: clampInt(patch.buyIn, 1, 10000000, current.buyIn),
+    startingStack: clampInt(patch.startingStack, 1, 10000000, current.startingStack),
+    minSeats: clampInt(patch.minSeats, 2, 10, current.minSeats),
+    maxSeats: clampInt(patch.maxSeats, 2, 10, current.maxSeats),
+    actionTimerSeconds: clampInt(patch.actionTimerSeconds, 5, 180, current.actionTimerSeconds),
+    straddle: { ...current.straddle, ...patch.straddle },
+    custom: { ...current.custom, ...patch.custom },
+    sevenTwo: { ...current.sevenTwo, ...patch.sevenTwo }
+  };
+  next.bigBlind = Math.max(next.bigBlind, next.smallBlind);
+  room.settings = next;
+  if (room.seats.length !== next.maxSeats) {
+    const existing = room.seats.slice(0, next.maxSeats);
+    while (existing.length < next.maxSeats) existing.push(null);
+    room.seats = existing;
+  }
+  audit(room, 'settings.changed', `${player.name} changed table settings`, player.id, { patch });
+  return { ok: true };
+}
+
+export function sit(room: RoomInternal, player: PlayerInternal, seat: number): SocketResult {
+  if (player.spectator) return { ok: false, error: 'Spectators cannot sit.' };
+  if (seat < 0 || seat >= room.seats.length) return { ok: false, error: 'Seat does not exist.' };
+  if (room.seats[seat] && room.seats[seat] !== player.id) return { ok: false, error: 'Seat is occupied.' };
+  if (player.seat !== null) room.seats[player.seat] = null;
+  room.seats[seat] = player.id;
+  player.seat = seat;
+  player.status = player.stack > 0 ? 'seated' : 'busted';
+  audit(room, 'seat.changed', `${player.name} sat in seat ${seat + 1}`, player.id, { seat });
+  return { ok: true };
+}
+
+export function setReady(room: RoomInternal, player: PlayerInternal, ready: boolean): SocketResult {
+  player.ready = ready;
+  audit(room, ready ? 'player.ready' : 'player.unready', `${player.name} is ${ready ? 'ready' : 'not ready'}`, player.id);
+  return { ok: true };
+}
+
+function eligiblePlayers(room: RoomInternal): PlayerInternal[] {
+  return room.seats
+    .map((id) => (id ? room.players.get(id) : null))
+    .filter((player): player is PlayerInternal => Boolean(player && !player.spectator && player.stack > 0 && player.status !== 'sitting_out' && player.status !== 'busted'));
+}
+
+function nextOccupiedSeat(room: RoomInternal, after: number | null, players = eligiblePlayers(room)): number | null {
+  if (players.length === 0) return null;
+  const occupied = new Set(players.map((player) => player.seat).filter((seat): seat is number => seat !== null));
+  const start = after === null ? -1 : after;
+  for (let offset = 1; offset <= room.seats.length; offset += 1) {
+    const seat = (start + offset + room.seats.length) % room.seats.length;
+    if (occupied.has(seat)) return seat;
+  }
+  return null;
+}
+
+function postBlind(room: RoomInternal, hand: HandInternal, seat: number | null, amount: number, label: string): void {
+  if (seat === null) return;
+  const participant = hand.participants.get(seat);
+  if (!participant) return;
+  const player = room.players.get(participant.playerId);
+  if (!player) return;
+  const paid = Math.min(player.stack, amount);
+  player.stack -= paid;
+  participant.currentBet += paid;
+  participant.committedThisHand += paid;
+  if (player.stack === 0) participant.allIn = true;
+  hand.currentBet = Math.max(hand.currentBet, participant.currentBet);
+  hand.minRaise = Math.max(hand.minRaise, room.settings.bigBlind);
+  audit(room, 'blind.posted', `${player.name} posted ${label} ${paid}`, player.id, { seat, amount: paid, label });
+}
+
+function buildHand(room: RoomInternal): SocketResult {
+  const players = eligiblePlayers(room);
+  if (players.length < room.settings.minSeats) return { ok: false, error: `Need at least ${room.settings.minSeats} seated players with chips.` };
+
+  const buttonSeat = nextOccupiedSeat(room, room.lastButtonSeat, players);
+  if (buttonSeat === null) return { ok: false, error: 'No eligible button seat.' };
+  const headsUp = players.length === 2;
+  const smallBlindSeat = headsUp ? buttonSeat : nextOccupiedSeat(room, buttonSeat, players);
+  const bigBlindSeat = headsUp ? nextOccupiedSeat(room, buttonSeat, players) : nextOccupiedSeat(room, smallBlindSeat, players);
+  const straddleSeat =
+    room.settings.straddle.enabled && room.settings.straddle.mode !== 'off'
+      ? room.settings.straddle.mode === 'button'
+        ? buttonSeat
+        : nextOccupiedSeat(room, bigBlindSeat, players)
+      : null;
+  const queued = room.queuedMode;
+  const mode = mergeMode('holdem', queued);
+  const { deck, seed, commitment } = shuffleDeck();
+  const participants = new Map<number, ParticipantInternal>();
+  const holeCount = mode.variant === 'holdem' ? 2 : mode.variant === 'omaha5' ? 5 : 4;
+
+  players.forEach((player) => {
+    if (player.seat === null) return;
+    const holeCards = deck.splice(0, holeCount);
+    participants.set(player.seat, {
+      playerId: player.id,
+      seat: player.seat,
+      holeCards,
+      currentBet: 0,
+      committedThisHand: 0,
+      folded: false,
+      allIn: false,
+      acted: false,
+      timedOut: false
+    });
+  });
+
+  const hand: HandInternal = {
+    id: nanoid(10),
+    number: room.nextHandNumber,
+    phase: mode.modifiers.bombPot ? 'flop' : 'preflop',
+    variant: mode.variant,
+    modifiers: mode.modifiers,
+    buttonSeat,
+    smallBlindSeat,
+    bigBlindSeat,
+    straddleSeat,
+    currentTurnSeat: null,
+    currentBet: 0,
+    minRaise: room.settings.bigBlind,
+    board: [],
+    board2: [],
+    pots: [],
+    eligibleSeatNumbers: [...participants.keys()],
+    lastAggressorSeat: null,
+    actionNonce: 1,
+    shuffleCommitment: commitment,
+    winners: [],
+    summary: '',
+    deck,
+    shuffleSeed: seed,
+    participants
+  };
+
+  room.hand = hand;
+  room.lifecycle = 'playing';
+  room.lastButtonSeat = buttonSeat;
+  room.nextHandNumber += 1;
+  room.queuedMode = null;
+  audit(room, 'hand.started', `Hand ${hand.number} started: ${variantLabel(hand.variant)}${queued ? `, queued ${queued.label}` : ''}`, undefined, {
+    buttonSeat,
+    smallBlindSeat,
+    bigBlindSeat,
+    straddleSeat,
+    shuffleCommitment: commitment
+  });
+  postBlind(room, hand, smallBlindSeat, room.settings.smallBlind, 'small blind');
+  postBlind(room, hand, bigBlindSeat, room.settings.bigBlind, 'big blind');
+  if (straddleSeat !== null) postBlind(room, hand, straddleSeat, Math.max(room.settings.straddle.amount, room.settings.bigBlind * 2), 'straddle');
+
+  if (mode.modifiers.bombPot) {
+    hand.participants.forEach((participant) => {
+      const player = room.players.get(participant.playerId);
+      if (!player) return;
+      const ante = Math.min(player.stack, Math.max(room.settings.bigBlind, room.settings.ante));
+      player.stack -= ante;
+      participant.committedThisHand += ante;
+      if (player.stack === 0) participant.allIn = true;
+    });
+    dealStreet(hand, 'flop');
+    audit(room, 'modifier.applied', `Bomb pot posted ${Math.max(room.settings.bigBlind, room.settings.ante)} from each player and skipped preflop betting.`);
+  }
+
+  hand.currentTurnSeat = firstActionSeat(room, hand);
+  updatePots(hand);
+  if (hand.currentTurnSeat === null) maybeAutoAdvanceOrAward(room);
+  return { ok: true };
+}
+
+function variantLabel(variant: Variant): string {
+  return variant === 'holdem' ? "No-Limit Hold'em" : variant === 'omaha4' ? 'PLO 4-card' : '5-card Omaha';
+}
+
+export function startGame(room: RoomInternal, player: PlayerInternal): SocketResult {
+  const hostError = requireHost(room, player);
+  if (hostError) return hostError;
+  if (room.lifecycle === 'ended') return { ok: false, error: 'Session already ended.' };
+  return buildHand(room);
+}
+
+function firstActionSeat(room: RoomInternal, hand: HandInternal): number | null {
+  if (hand.phase === 'preflop') {
+    return nextActiveSeat(room, hand, hand.straddleSeat ?? hand.bigBlindSeat);
+  }
+  return nextActiveSeat(room, hand, hand.buttonSeat);
+}
+
+function nextActiveSeat(room: RoomInternal, hand: HandInternal, after: number | null): number | null {
+  const activeSeats = [...hand.participants.values()]
+    .filter((participant) => !participant.folded && !participant.allIn)
+    .map((participant) => participant.seat);
+  if (activeSeats.length === 0) return null;
+  const active = new Set(activeSeats);
+  const start = after === null ? -1 : after;
+  for (let offset = 1; offset <= room.seats.length; offset += 1) {
+    const seat = (start + offset + room.seats.length) % room.seats.length;
+    if (active.has(seat)) return seat;
+  }
+  return null;
+}
+
+function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActions {
+  const hand = room.hand;
+  if (!hand || player.seat === null || hand.currentTurnSeat !== player.seat) return emptyLegalActions();
+  const participant = hand.participants.get(player.seat);
+  if (!participant || participant.folded || participant.allIn) return emptyLegalActions();
+  const toCall = Math.max(0, hand.currentBet - participant.currentBet);
+  const potSize = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
+  const maxBet = player.stack;
+  const minRaiseTo = hand.currentBet + hand.minRaise;
+  const ploMax = hand.variant === 'holdem' ? maxBet : Math.min(maxBet, potSize + toCall * 2 + player.stack);
+  return {
+    canFold: toCall > 0,
+    canCheck: toCall === 0,
+    canCall: toCall > 0 && player.stack > 0,
+    callAmount: Math.min(toCall, player.stack),
+    canBet: toCall === 0 && player.stack > 0,
+    canRaise: toCall > 0 && player.stack > toCall && player.stack + participant.currentBet >= minRaiseTo,
+    minBet: Math.min(room.settings.bigBlind, maxBet),
+    minRaiseTo,
+    maxBet: Math.max(0, ploMax),
+    allInAmount: player.stack,
+    potSize
+  };
+}
+
+export function act(
+  room: RoomInternal,
+  player: PlayerInternal,
+  payload: { action: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in'; amount?: number; nonce: number }
+): SocketResult {
+  const hand = room.hand;
+  if (!hand || room.lifecycle !== 'playing') return { ok: false, error: 'No active hand.' };
+  if (player.seat === null || hand.currentTurnSeat !== player.seat) return { ok: false, error: 'It is not your turn.' };
+  if (payload.nonce !== hand.actionNonce) {
+    audit(room, 'command.rejected', `Rejected stale ${payload.action} from ${player.name}`, player.id, { expected: hand.actionNonce, got: payload.nonce });
+    return { ok: false, error: 'That action is stale.' };
+  }
+  if (rateLimited(player.actionTimestamps, 8, 1500)) {
+    audit(room, 'command.rejected', `Rate-limited action flood from ${player.name}`, player.id);
+    return { ok: false, error: 'Slow down.' };
+  }
+  const participant = hand.participants.get(player.seat);
+  if (!participant) return { ok: false, error: 'You are not in this hand.' };
+  const legal = legalActionsFor(room, player);
+  const toCall = legal.callAmount;
+
+  if (payload.action === 'fold') {
+    if (!legal.canFold) return { ok: false, error: 'Fold is not legal when checking is free.' };
+    participant.folded = true;
+    participant.acted = true;
+    audit(room, 'action.fold', `${player.name} folded`, player.id);
+  } else if (payload.action === 'check') {
+    if (!legal.canCheck) return { ok: false, error: 'Check is not legal.' };
+    participant.acted = true;
+    audit(room, 'action.check', `${player.name} checked`, player.id);
+  } else if (payload.action === 'call') {
+    if (!legal.canCall) return { ok: false, error: 'Call is not legal.' };
+    moveChips(player, participant, toCall);
+    participant.acted = true;
+    audit(room, 'action.call', `${player.name} called ${toCall}`, player.id, { amount: toCall });
+  } else if (payload.action === 'bet' || payload.action === 'raise') {
+    const amount = clampInt(payload.amount, 1, legal.maxBet, 0);
+    const targetBet = participant.currentBet + amount;
+    if (payload.action === 'bet' && !legal.canBet) return { ok: false, error: 'Bet is not legal.' };
+    if (payload.action === 'raise' && !legal.canRaise) return { ok: false, error: 'Raise is not legal.' };
+    if (payload.action === 'bet' && amount < legal.minBet && amount < player.stack) return { ok: false, error: `Minimum bet is ${legal.minBet}.` };
+    if (payload.action === 'raise' && targetBet < legal.minRaiseTo && amount < player.stack) return { ok: false, error: `Minimum raise is to ${legal.minRaiseTo}.` };
+    if (amount > legal.maxBet) return { ok: false, error: 'Bet is larger than your stack.' };
+    const previousBet = hand.currentBet;
+    moveChips(player, participant, amount);
+    if (participant.currentBet > hand.currentBet) {
+      hand.currentBet = participant.currentBet;
+      hand.minRaise = Math.max(room.settings.bigBlind, hand.currentBet - previousBet);
+      hand.lastAggressorSeat = participant.seat;
+      hand.participants.forEach((entry) => {
+        if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
+      });
+    }
+    participant.acted = true;
+    audit(room, payload.action === 'bet' ? 'action.bet' : 'action.raise', `${player.name} ${payload.action === 'bet' ? 'bet' : 'raised'} ${amount}`, player.id, {
+      amount,
+      currentBet: participant.currentBet
+    });
+  } else if (payload.action === 'all_in') {
+    const amount = player.stack;
+    if (amount <= 0) return { ok: false, error: 'No chips to move all-in.' };
+    const previousBet = hand.currentBet;
+    moveChips(player, participant, amount);
+    if (participant.currentBet > hand.currentBet) {
+      hand.currentBet = participant.currentBet;
+      if (hand.currentBet - previousBet >= hand.minRaise) {
+        hand.participants.forEach((entry) => {
+          if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
+        });
+      }
+      hand.lastAggressorSeat = participant.seat;
+    }
+    participant.acted = true;
+    audit(room, 'action.all_in', `${player.name} moved all-in for ${amount}`, player.id, { amount, currentBet: participant.currentBet });
+  }
+
+  hand.actionNonce += 1;
+  updatePots(hand);
+  maybeAutoAdvanceOrAward(room);
+  return { ok: true };
+}
+
+function moveChips(player: PlayerInternal, participant: ParticipantInternal, amount: number): void {
+  const paid = Math.min(player.stack, Math.max(0, amount));
+  player.stack -= paid;
+  participant.currentBet += paid;
+  participant.committedThisHand += paid;
+  if (player.stack === 0) participant.allIn = true;
+}
+
+function updatePots(hand: HandInternal): void {
+  hand.pots = buildSidePots(
+    [...hand.participants.values()].map((entry) => ({
+      seat: entry.seat,
+      amount: entry.committedThisHand,
+      folded: entry.folded
+    }))
+  );
+}
+
+function maybeAutoAdvanceOrAward(room: RoomInternal): void {
+  const hand = room.hand;
+  if (!hand) return;
+  const live = [...hand.participants.values()].filter((entry) => !entry.folded);
+  if (live.length === 1) {
+    awardWithoutShowdown(room, live[0]);
+    return;
+  }
+  const active = live.filter((entry) => !entry.allIn);
+  const bettingComplete =
+    active.length === 0 ||
+    active.every((entry) => entry.acted && entry.currentBet === hand.currentBet);
+  if (!bettingComplete) {
+    hand.currentTurnSeat = nextActiveSeat(room, hand, hand.currentTurnSeat);
+    return;
+  }
+
+  if (hand.phase === 'river' || active.length === 0) {
+    while (hand.board.length < 5) {
+      const phase = nextPhase(hand.phase);
+      hand.phase = phase;
+      dealStreet(hand, phase);
+    }
+    if (hand.modifiers.doubleBoard) {
+      while (hand.board2.length < 5) dealBoard2Card(hand);
+    }
+    showdown(room);
+    return;
+  }
+
+  advanceStreet(room, hand);
+}
+
+function nextPhase(phase: HandPhase): HandPhase {
+  if (phase === 'preflop') return 'flop';
+  if (phase === 'flop') return 'turn';
+  if (phase === 'turn') return 'river';
+  return 'showdown';
+}
+
+function advanceStreet(room: RoomInternal, hand: HandInternal): void {
+  const phase = nextPhase(hand.phase);
+  hand.phase = phase;
+  hand.currentBet = 0;
+  hand.minRaise = room.settings.bigBlind;
+  hand.lastAggressorSeat = null;
+  hand.participants.forEach((entry) => {
+    entry.currentBet = 0;
+    entry.acted = entry.folded || entry.allIn;
+  });
+  dealStreet(hand, phase);
+  hand.currentTurnSeat = firstActionSeat(room, hand);
+  audit(room, `street.${phase}`, `${phase[0].toUpperCase()}${phase.slice(1)} dealt`, undefined, {
+    board: hand.board,
+    board2: hand.board2
+  });
+}
+
+function dealStreet(hand: HandInternal, phase: HandPhase): void {
+  if (phase === 'flop' && hand.board.length === 0) {
+    hand.board.push(...hand.deck.splice(0, 3));
+    if (hand.modifiers.doubleBoard) hand.board2.push(...hand.deck.splice(0, 3));
+  } else if (phase === 'turn' && hand.board.length === 3) {
+    hand.board.push(hand.deck.shift() as Card);
+    if (hand.modifiers.doubleBoard) dealBoard2Card(hand);
+  } else if (phase === 'river' && hand.board.length === 4) {
+    hand.board.push(hand.deck.shift() as Card);
+    if (hand.modifiers.doubleBoard) dealBoard2Card(hand);
+  }
+}
+
+function dealBoard2Card(hand: HandInternal): void {
+  hand.board2.push(hand.deck.shift() as Card);
+}
+
+function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): void {
+  const hand = room.hand;
+  const player = room.players.get(winner.playerId);
+  if (!hand || !player) return;
+  const total = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
+  player.stack += total;
+  hand.phase = 'complete';
+  hand.currentTurnSeat = null;
+  hand.winners = [player.name];
+  hand.summary = `${player.name} won ${total} without showdown.`;
+  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.deck.join(',')}`;
+  audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
+  audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
+}
+
+function showdown(room: RoomInternal): void {
+  const hand = room.hand;
+  if (!hand) return;
+  hand.phase = 'showdown';
+  updatePots(hand);
+  const live = [...hand.participants.values()].filter((entry) => !entry.folded);
+  const awards: string[] = [];
+  const winningSeats = new Set<number>();
+
+  hand.pots.forEach((pot) => {
+    const contenders = live.filter((entry) => pot.eligibleSeatNumbers.includes(entry.seat));
+    const boardWinners = winnerSeats(rankPlayers(hand.variant, contenders, hand.board));
+    if (hand.modifiers.doubleBoard && hand.board2.length >= 5) {
+      boardWinners.forEach((seat) => winningSeats.add(seat));
+      const secondWinners = winnerSeats(rankPlayers(hand.variant, contenders, hand.board2));
+      secondWinners.forEach((seat) => winningSeats.add(seat));
+      const firstHalf = Math.floor(pot.amount / 2);
+      awardPotShares(room, firstHalf, boardWinners, `${pot.label} board 1`, awards);
+      awardPotShares(room, pot.amount - firstHalf, secondWinners, `${pot.label} board 2`, awards);
+    } else {
+      boardWinners.forEach((seat) => winningSeats.add(seat));
+      awardPotShares(room, pot.amount, boardWinners, pot.label, awards);
+    }
+  });
+
+  if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) {
+    applySevenTwoBounty(room, live.filter((entry) => winningSeats.has(entry.seat)), awards);
+  }
+
+  if (hand.modifiers.showOne) {
+    live
+      .filter((entry) => winningSeats.has(entry.seat))
+      .forEach((entry) => {
+        const player = room.players.get(entry.playerId);
+        if (player) audit(room, 'show.one_card', `${player.name} showed ${cardLabel(entry.holeCards[0])}`, player.id);
+      });
+  }
+
+  hand.phase = 'complete';
+  hand.currentTurnSeat = null;
+  hand.winners = awards;
+  hand.summary = awards.join(' · ') || 'Hand ended with no award.';
+  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.deck.join(',')}`;
+  audit(room, 'showdown', hand.summary, undefined, { board: hand.board, board2: hand.board2 });
+  audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
+}
+
+function awardPotShares(
+  room: RoomInternal,
+  amount: number,
+  winnerSeatNumbers: number[],
+  label: string,
+  awards: string[]
+): void {
+  const payable = amount;
+  if (winnerSeatNumbers.length === 0 || payable <= 0) return;
+  const share = Math.floor(payable / winnerSeatNumbers.length);
+  let odd = payable % winnerSeatNumbers.length;
+  winnerSeatNumbers
+    .slice()
+    .sort((a, b) => a - b)
+    .forEach((seat) => {
+      const participant = room.hand?.participants.get(seat);
+      const player = participant ? room.players.get(participant.playerId) : null;
+      if (!player) return;
+      const paid = share + (odd > 0 ? 1 : 0);
+      odd -= 1;
+      player.stack += paid;
+      awards.push(`${player.name} won ${paid} from ${label}`);
+      audit(room, 'pot.awarded', `${player.name} won ${paid} from ${label}`, player.id, { amount: paid, seat });
+    });
+}
+
+function applySevenTwoBounty(room: RoomInternal, live: ParticipantInternal[], awards: string[]): void {
+  const hand = room.hand;
+  if (!hand) return;
+  live.forEach((participant) => {
+    const player = room.players.get(participant.playerId);
+    if (!player) return;
+    const { qualifies, suited } = isSevenTwo(participant.holeCards);
+    if (!qualifies) return;
+    const bounty = room.settings.sevenTwo.bounty + (suited ? room.settings.sevenTwo.suitedBonus : 0);
+    let paidTotal = 0;
+    room.players.forEach((other) => {
+      if (other.id === player.id || other.spectator) return;
+      const paid = Math.min(other.stack, bounty);
+      other.stack -= paid;
+      player.stack += paid;
+      paidTotal += paid;
+    });
+    if (paidTotal > 0) {
+      const message = `${player.name} triggered 7-2 bounty for ${paidTotal}`;
+      awards.push(message);
+      audit(room, 'bounty.seven_two', message, player.id, {
+        bounty,
+        suited,
+        cards: participant.holeCards.map(cardLabel)
+      });
+    }
+  });
+}
+
+export function requestChips(room: RoomInternal, player: PlayerInternal, amountInput: number, reasonInput = ''): SocketResult {
+  if (player.spectator) return { ok: false, error: 'Spectators do not have stacks.' };
+  const amount = clampInt(amountInput, 1, 1000000, 0);
+  const reason = cleanChat(reasonInput) || 'play-money chip request';
+  if (!amount) return { ok: false, error: 'Enter a valid chip amount.' };
+  if (room.settings.chipMode === 'strict' && room.hand && room.hand.phase !== 'complete') {
+    audit(room, 'chips.deferred', `${player.name} requested ${amount}; strict mode defers active-hand chip changes`, player.id);
+    player.pendingChipRequest = { amount, reason, at: Date.now() };
+    return { ok: true };
+  }
+  if (room.settings.selfServiceChips || room.settings.autoApproveChips) {
+    addChips(room, player, amount, reason, player.id);
+    return { ok: true };
+  }
+  player.pendingChipRequest = { amount, reason, at: Date.now() };
+  audit(room, 'chips.requested', `${player.name} requested ${amount} chips`, player.id, { amount, reason });
+  return { ok: true };
+}
+
+export function approveChips(room: RoomInternal, host: PlayerInternal, targetId: string, amountInput: number, reasonInput = ''): SocketResult {
+  const hostError = requireHost(room, host);
+  if (hostError) return hostError;
+  const target = room.players.get(targetId);
+  if (!target) return { ok: false, error: 'Player not found.' };
+  const amount = clampInt(amountInput || target.pendingChipRequest?.amount, -1000000, 1000000, 0);
+  const reason = cleanChat(reasonInput || target.pendingChipRequest?.reason || 'host chip edit');
+  if (!amount) return { ok: false, error: 'Enter a valid chip amount.' };
+  addChips(room, target, amount, reason, host.id);
+  target.pendingChipRequest = undefined;
+  return { ok: true };
+}
+
+function addChips(room: RoomInternal, target: PlayerInternal, amount: number, reason: string, actorId: string): void {
+  target.stack += amount;
+  if (amount > 0) target.buyInTotal += amount;
+  if (target.stack > 0 && target.status === 'busted') target.status = 'seated';
+  audit(room, amount >= 0 ? 'chips.added' : 'chips.removed', `${target.name} ${amount >= 0 ? 'received' : 'lost'} ${Math.abs(amount)} chips: ${reason}`, actorId, {
+    targetId: target.id,
+    amount,
+    reason
+  });
+}
+
+export function queueMode(room: RoomInternal, player: PlayerInternal, mode: CustomModeName): SocketResult {
+  const error = validateMode(room.settings, mode);
+  if (error) return { ok: false, error };
+  if (room.queuedMode) return { ok: false, error: `${room.queuedMode.label} is already queued.` };
+  if (room.settings.custom.permission === 'creator_only' && !player.isHost) return { ok: false, error: 'Only host can queue modes.' };
+  if (room.settings.custom.permission === 'button' && room.hand?.buttonSeat !== player.seat) return { ok: false, error: 'Only the button can queue this hand.' };
+  if (room.nextHandNumber - player.lastCustomHand < room.settings.custom.cooldownHands) return { ok: false, error: 'Custom mode cooldown is still active.' };
+  room.queuedMode = buildQueuedMode(mode, player.id, player.name, room.nextHandNumber);
+  player.lastCustomHand = room.nextHandNumber;
+  audit(room, 'custom.queued', `${player.name} queued ${modeLabel(mode)} for hand ${room.nextHandNumber}`, player.id, { mode });
+  return { ok: true };
+}
+
+export function hostAction(
+  room: RoomInternal,
+  host: PlayerInternal,
+  payload: { action: 'kick' | 'ban' | 'mute' | 'forceSitOut' | 'transferHost' | 'lock' | 'spectators'; playerId?: string; value?: boolean }
+): SocketResult {
+  const hostError = requireHost(room, host);
+  if (hostError) return hostError;
+  if (payload.action === 'lock') {
+    room.settings.locked = Boolean(payload.value);
+    audit(room, 'host.lock', `${host.name} ${room.settings.locked ? 'locked' : 'unlocked'} the room`, host.id);
+    return { ok: true };
+  }
+  if (payload.action === 'spectators') {
+    room.settings.spectatorsAllowed = Boolean(payload.value);
+    audit(room, 'host.spectators', `${host.name} turned spectators ${room.settings.spectatorsAllowed ? 'on' : 'off'}`, host.id);
+    return { ok: true };
+  }
+  const target = payload.playerId ? room.players.get(payload.playerId) : null;
+  if (!target) return { ok: false, error: 'Player not found.' };
+  if (payload.action === 'transferHost') {
+    host.isHost = false;
+    target.isHost = true;
+    room.hostId = target.id;
+    audit(room, 'host.transferred', `${host.name} transferred host to ${target.name}`, host.id, { targetId: target.id });
+    return { ok: true };
+  }
+  if (payload.action === 'mute') {
+    target.muted = Boolean(payload.value);
+    audit(room, 'host.mute', `${target.name} was ${target.muted ? 'muted' : 'unmuted'}`, host.id, { targetId: target.id });
+    return { ok: true };
+  }
+  if (payload.action === 'forceSitOut') {
+    target.status = 'sitting_out';
+    audit(room, 'host.force_sit_out', `${target.name} was forced to sit out`, host.id, { targetId: target.id });
+    return { ok: true };
+  }
+  if (payload.action === 'kick' || payload.action === 'ban') {
+    if (target.seat !== null) room.seats[target.seat] = null;
+    target.seat = null;
+    target.status = 'sitting_out';
+    if (payload.action === 'ban') {
+      target.banned = true;
+      room.bannedTokens.add(target.sessionToken);
+    }
+    audit(room, payload.action === 'ban' ? 'host.ban' : 'host.kick', `${target.name} was ${payload.action === 'ban' ? 'banned' : 'kicked'}`, host.id, {
+      targetId: target.id
+    });
+    return { ok: true };
+  }
+  return { ok: false, error: 'Unknown host action.' };
+}
+
+export function addChat(room: RoomInternal, player: PlayerInternal, input: string): SocketResult {
+  if (player.muted) return { ok: false, error: 'You are muted.' };
+  if (rateLimited(player.chatTimestamps, 6, 6000)) {
+    player.muted = true;
+    audit(room, 'chat.rate_limited', `${player.name} was auto-muted for chat spam`, player.id);
+    return { ok: false, error: 'Chat spam detected; you were muted.' };
+  }
+  const message = cleanChat(input);
+  if (!message) return { ok: false, error: 'Message is empty.' };
+  room.chat.push({ id: nanoid(8), at: Date.now(), playerId: player.id, playerName: player.name, message });
+  audit(room, 'chat.message', `${player.name}: ${message}`, player.id);
+  if (room.chat.length > 250) room.chat.splice(0, room.chat.length - 250);
+  return { ok: true };
+}
+
+function rateLimited(timestamps: number[], limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  timestamps.push(now);
+  while (timestamps.length && timestamps[0] < now - windowMs) timestamps.shift();
+  return timestamps.length > limit;
+}
+
+export function endSession(room: RoomInternal, host: PlayerInternal): SocketResult<{ exportText: string; exportJson: string }> {
+  const hostError = requireHost(room, host);
+  if (hostError) return hostError;
+  if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish or pause the hand before ending the session.' };
+  room.lifecycle = 'ended';
+  room.players.forEach((player) => {
+    if (player.seat !== null) player.cashOut = player.stack;
+  });
+  audit(room, 'session.ended', `${host.name} ended the session and generated export`, host.id);
+  const exportJson = JSON.stringify(publicState(room), null, 2);
+  const lines = [
+    `Feltline private play-money session ${room.code}`,
+    `Room: ${room.settings.roomName}`,
+    `Created: ${new Date(room.createdAt).toISOString()}`,
+    '',
+    'Ledger',
+    ...[...room.players.values()].map((player) => `${player.name}: buy-ins ${player.buyInTotal}, stack ${player.stack}, cash-out ${player.cashOut}, up/down ${player.stack + player.cashOut - player.buyInTotal}`),
+    '',
+    'Audit',
+    ...room.audit.map((entry) => `${new Date(entry.at).toISOString()} [${entry.type}] ${entry.message}`)
+  ];
+  const exportText = lines.join('\n');
+  room.endedExport = { exportText, exportJson };
+  return { ok: true, exportText, exportJson };
+}
+
+export type RoomCommandName = keyof ClientToServerEvents;

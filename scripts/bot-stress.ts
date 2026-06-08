@@ -1,0 +1,124 @@
+import { act, createRoom, getRoom, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame } from '../src/server/room';
+import type { LegalActions, PlayerPublic } from '../src/shared/types';
+
+const targetHands = Number(process.env.HANDS ?? 1000);
+const progressEvery = Number(process.env.PROGRESS_EVERY ?? 50);
+const created = createRoom('Bot Host', 'Stress Table');
+if (!created.ok) throw new Error(created.error);
+const room = getRoom(created.code)!;
+const host = playerInRoom(room, created.playerId)!;
+sit(room, host, 0);
+
+for (let index = 1; index < 6; index += 1) {
+  const joined = joinRoom(created.code, `Bot ${index}`);
+  if (!joined.ok) throw new Error(joined.error);
+  const player = playerInRoom(room, joined.playerId)!;
+  sit(room, player, index);
+}
+
+let completed = 0;
+let illegalRejected = 0;
+let actions = 0;
+let lastTotal = totalChips();
+
+while (completed < targetHands) {
+  if (progressEvery === 1) console.log(`stress starting hand ${completed + 1}/${targetHands}`);
+  topUpBustedPlayers();
+  maybeQueueMode();
+  if (progressEvery === 1) console.log('stress calling startGame');
+  const started = startGame(room, host);
+  if (!started.ok) throw new Error(started.error);
+  if (progressEvery === 1) console.log(`stress hand ${room.hand?.number} phase ${room.hand?.phase}`);
+
+  let guard = 0;
+  while (room.hand && room.hand.phase !== 'complete') {
+    guard += 1;
+    if (progressEvery === 1 && guard % 10 === 0) console.log(`stress hand ${room.hand?.number} action ${guard} phase ${room.hand?.phase}`);
+    if (guard > 500) throw new Error(`Hand ${room.hand.number} exceeded action guard`);
+    const publicHand = snapshot(room, host.id).publicState.hand!;
+    const staleSeat = publicHand.currentTurnSeat;
+    const actor = [...room.players.values()].find((player) => player.seat === staleSeat);
+    if (!actor) throw new Error('No actor for current turn');
+    actor.actionTimestamps = [];
+    const privateState = snapshot(room, actor.id).privateState!;
+    const legal = privateState.legalActions;
+    const chosen = chooseAction(actor.stack, legal);
+    if (progressEvery === 1) console.log(`stress action ${guard} seat ${actor.seat} stack ${actor.stack} chose ${chosen.action} ${'amount' in chosen ? chosen.amount ?? '' : ''}`);
+    const result = act(room, actor, chosen);
+    if (!result.ok) throw new Error(`Legal bot action rejected: ${result.error}`);
+    actions += 1;
+    const stale = act(room, actor, chosen);
+    if (!stale.ok) illegalRejected += 1;
+    assertNoLeak();
+  }
+
+  completed += 1;
+  if (progressEvery > 0 && completed % progressEvery === 0) {
+    console.log(`stress progress: ${completed}/${targetHands} hands, ${actions} actions`);
+  }
+  const currentTotal = totalChips();
+  if (currentTotal <= 0) throw new Error('All chips vanished');
+  if (Math.abs(currentTotal - lastTotal) > 1000000) throw new Error(`Unexpected chip drift: ${lastTotal} -> ${currentTotal}`);
+  lastTotal = currentTotal;
+}
+
+console.log(
+  JSON.stringify(
+    {
+      room: room.code,
+      completed,
+      actions,
+      illegalRejected,
+      auditEntries: room.audit.length,
+      totalChips: totalChips()
+    },
+    null,
+    2
+  )
+);
+process.exit(0);
+
+function chooseAction(stack: number, legal: LegalActions) {
+  const nonce = room.hand!.actionNonce;
+  if (legal.canCheck) {
+    if (legal.canBet && stack > 80 && Math.random() < 0.24) return { action: 'bet' as const, amount: Math.min(legal.maxBet, Math.max(legal.minBet, Math.round(legal.potSize / 2))) || legal.minBet, nonce };
+    return { action: 'check' as const, nonce };
+  }
+  if (legal.canRaise && stack > legal.callAmount * 2 && Math.random() < 0.18) {
+    return { action: 'raise' as const, amount: Math.min(legal.maxBet, Math.max(legal.callAmount + room.settings.bigBlind, legal.minRaiseTo)), nonce };
+  }
+  if (legal.canCall && Math.random() < 0.72) return { action: 'call' as const, nonce };
+  if (legal.allInAmount > 0 && Math.random() < 0.04) return { action: 'all_in' as const, nonce };
+  return { action: 'fold' as const, nonce };
+}
+
+function topUpBustedPlayers() {
+  room.players.forEach((player) => {
+    if (!player.spectator && player.stack < room.settings.bigBlind * 2) {
+      requestChips(room, player, room.settings.buyIn, 'bot top-up');
+    }
+  });
+}
+
+function maybeQueueMode() {
+  if (room.queuedMode || Math.random() > 0.2) return;
+  const modes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
+  queueMode(room, host, modes[Math.floor(Math.random() * modes.length)]);
+}
+
+function totalChips() {
+  return [...room.players.values()].reduce((sum, player) => sum + player.stack + player.cashOut, 0);
+}
+
+function assertNoLeak() {
+  const publicState = snapshot(room, host.id).publicState;
+  const visibleCards = new Set([...(publicState.hand?.board ?? []), ...(publicState.hand?.board2 ?? [])]);
+  room.players.forEach((player) => {
+    const privateCards = snapshot(room, player.id).privateState?.holeCards ?? [];
+    const publicPlayer = publicState.players.find((entry: PlayerPublic) => entry.id === player.id);
+    if (!publicPlayer) throw new Error('Missing public player');
+    privateCards.forEach((card) => {
+      if (visibleCards.has(card)) throw new Error(`Private card duplicated on a public board: ${card}`);
+    });
+  });
+}
