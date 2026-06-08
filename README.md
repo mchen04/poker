@@ -57,7 +57,9 @@ join.
 npm run typecheck   # tsc --noEmit
 npm test            # vitest: engine unit tests (betting, side pots, showdown, bounty, modes)
 npm run stress      # 1000 scripted hands: chip conservation + no private-card leaks
+npm run brain       # all-bot games: every bot action is legal + chips conserved
 npm run build       # next build
+npm run smoke       # WebSocket transport smoke test (needs `npm run party:dev` running)
 ```
 
 ## Architecture

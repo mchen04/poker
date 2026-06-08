@@ -1,7 +1,7 @@
 import type { CustomModeName, CustomPermission, RoomSettings, RoomSettingsPatch } from '../shared/types';
 import { cleanName, clampInt } from '../shared/sanitize';
+import { ALL_CUSTOM_MODES } from '../shared/modes';
 
-const customModes: CustomModeName[] = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle'];
 const customPermissions: CustomPermission[] = ['creator_only', 'button', 'everyone_with_cooldown'];
 
 export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
@@ -28,7 +28,7 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
       enabled: true,
       permission: 'everyone_with_cooldown',
       cooldownHands: 4,
-      allowedModes: ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle']
+      allowedModes: [...ALL_CUSTOM_MODES]
     },
     sevenTwo: {
       enabled: true,
@@ -45,7 +45,7 @@ export function sanitizeSettings(current: RoomSettings, patch: RoomSettingsPatch
   const straddleMode = patch.straddle?.mode && ['off', 'utg', 'button'].includes(patch.straddle.mode) ? patch.straddle.mode : current.straddle.mode;
   const permission = patch.custom?.permission && customPermissions.includes(patch.custom.permission) ? patch.custom.permission : current.custom.permission;
   const allowedModes = Array.isArray(patch.custom?.allowedModes)
-    ? patch.custom.allowedModes.filter((mode): mode is CustomModeName => customModes.includes(mode as CustomModeName))
+    ? patch.custom.allowedModes.filter((mode): mode is CustomModeName => ALL_CUSTOM_MODES.includes(mode as CustomModeName))
     : current.custom.allowedModes;
 
   const next: RoomSettings = {

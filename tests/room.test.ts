@@ -529,7 +529,8 @@ describe('room command model', () => {
     expect(startGame(room, host).ok).toBe(true);
     const hand = room.hand!;
     const [winner, folder, alreadyFolded] = [...hand.participants.values()];
-    winner.holeCards = ['7s', '2d'];
+    // Extra non-qualifying cards (PLO-like) must NOT leak into the public audit.
+    winner.holeCards = ['7s', '2d', 'Ah', 'Kc'];
     folder.folded = false;
     folder.currentBet = 0;
     alreadyFolded.folded = true;
@@ -538,7 +539,14 @@ describe('room command model', () => {
     const folderPlayer = playerInRoom(room, folder.playerId)!;
     expect(act(room, folderPlayer, { action: 'fold', nonce: hand.actionNonce }).ok).toBe(true);
     expect(room.hand?.phase).toBe('complete');
-    expect(room.audit.some((entry) => entry.type === 'bounty.seven_two' && entry.actor === winner.playerId)).toBe(true);
+    const bountyEntry = room.audit.find((entry) => entry.type === 'bounty.seven_two' && entry.actor === winner.playerId);
+    expect(bountyEntry).toBeDefined();
+    // Only the qualifying 7 and 2 are revealed — never the full mucked holding.
+    const revealed = (bountyEntry!.data as { cards?: string[] }).cards ?? [];
+    expect(revealed).toHaveLength(2);
+    expect(revealed.some((c) => c.includes('7'))).toBe(true);
+    expect(revealed.some((c) => c.includes('2'))).toBe(true);
+    expect(revealed.some((c) => c.includes('A') || c.includes('K'))).toBe(false);
   });
 
   it('skips the straddle and acts button-first heads-up', () => {

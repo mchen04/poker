@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "stress": "tsx scripts/poker-stress.ts",
+    "brain": "tsx scripts/bot-brain-check.ts",
     "smoke": "tsx scripts/server-smoke.ts"
   },
   "dependencies": {

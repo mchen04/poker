@@ -95,7 +95,7 @@ export function Seat({
           maxWidth: 132,
           borderRadius: 10,
           padding: "4px 8px",
-          background: isMe ? "linear-gradient(180deg, rgba(201,165,74,0.22), rgba(201,165,74,0.08))" : "rgba(8,26,16,0.92)",
+          background: isMe ? "linear-gradient(180deg, rgba(201,165,74,0.22), rgba(201,165,74,0.08))" : D.panelDark,
           border: `1.5px solid ${borderColor}`,
           boxShadow: isWinner ? `0 0 16px ${D.gold}` : isActor ? `0 0 10px ${D.gold}88` : "0 2px 8px rgba(0,0,0,0.4)",
           textAlign: "center",

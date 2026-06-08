@@ -110,7 +110,7 @@ export default function HomePage() {
           <div
             className="rounded-2xl p-6 flex flex-col gap-4"
             style={{
-              background: "rgba(8,26,16,0.85)",
+              background: D.panelDark,
               border: `1px solid ${surfaces.dividerLine}`,
             }}
           >

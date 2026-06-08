@@ -4,9 +4,11 @@
  *
  *   1. action-clock expiry (turnStartedAt + actionTimerSeconds) for the seat
  *      currently to act, and
- *   2. empty-room cleanup grace (emptySince + EMPTY_ROOM_GRACE_MS).
+ *   2. the next-hand auto-deal time (autoStartAt) during continuous play.
  *
- * If neither applies, the alarm is deleted so the DO can hibernate.
+ * If neither applies, the alarm is deleted so the DO can hibernate. (Empty-room
+ * cleanup is handled separately in the server's onClose/onAlarm using the
+ * persisted room.emptySince + EMPTY_ROOM_GRACE_MS, so it survives hibernation.)
  */
 
 import type * as Party from "partykit/server";

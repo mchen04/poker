@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { RoomPublicState } from "@/modes/holdem/shared/types";
 import { END_GAME_CONFIRM_MS } from "@/lib/constants";
 import { D } from "@/lib/theme";
+import { ChromeButton } from "./ChromeButton";
 
 /** How long the "Copied!" invite confirmation shows before reverting. */
 const COPIED_RESET_MS = 1500;
@@ -61,7 +62,7 @@ export function RoomHeader({
         justifyContent: "space-between",
         gap: 8,
         padding: "8px 12px",
-        background: "rgba(8,26,16,0.9)",
+        background: D.panelDark,
         borderBottom: "1px solid rgba(201,165,74,0.2)",
         flexWrap: "wrap",
       }}
@@ -82,21 +83,5 @@ export function RoomHeader({
 }
 
 function HeaderBtn({ label, onClick, tone }: { label: string; onClick: () => void; tone?: "danger" }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 11,
-        fontWeight: 800,
-        padding: "6px 10px",
-        borderRadius: 8,
-        background: tone === "danger" ? "rgba(192,96,96,0.18)" : "rgba(255,255,255,0.07)",
-        border: `1px solid ${tone === "danger" ? "rgba(192,96,96,0.45)" : D.panelBorder}`,
-        color: tone === "danger" ? "#f0b0b0" : D.text,
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  );
+  return <ChromeButton label={label} onClick={onClick} tone={tone} size="md" />;
 }

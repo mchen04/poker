@@ -636,7 +636,7 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
     canCall: toCall > 0 && player.stack > 0,
     callAmount: Math.min(toCall, player.stack),
     canBet: toCall === 0 && player.stack > 0,
-    canRaise: !participant.acted && toCall > 0 && player.stack > toCall && player.stack + participant.currentBet >= minRaiseTo,
+    canRaise: !participant.acted && toCall > 0 && player.stack > toCall && minRaiseTo <= ploMax,
     minBet: Math.min(room.settings.bigBlind, player.stack),
     minRaiseTo,
     maxBet: Math.max(0, ploMax),
@@ -939,10 +939,15 @@ function applySevenTwoBounty(room: RoomInternal, live: ParticipantInternal[], aw
     if (paidTotal > 0) {
       const message = `${player.name} triggered 7-2 bounty for ${paidTotal}`;
       awards.push(message);
+      // Reveal ONLY the qualifying 7 and 2 (the bounty proof) — never the full
+      // holding, so a mucked fold-out win (and PLO's extra cards) stays private.
+      const sevenCard = participant.holeCards.find((c) => c[0] === '7');
+      const twoCard = participant.holeCards.find((c) => c[0] === '2');
+      const proof = [sevenCard, twoCard].filter((c): c is Card => Boolean(c));
       audit(room, 'bounty.seven_two', message, player.id, {
         bounty,
         suited,
-        cards: participant.holeCards.map(cardLabel)
+        cards: proof.map(cardLabel)
       });
     }
   });

@@ -20,6 +20,8 @@ export const D = {
   goldButton: gradients.goldButton,
   panelBorder: overlays.panelBorder,
   feltLight: colors.feltLight,
+  /** Dark translucent felt-panel surface (header bar, seat plate, side panel, cards). */
+  panelDark: "rgba(8,26,16,0.92)",
   serif: typography.serif,
 } as const;
 

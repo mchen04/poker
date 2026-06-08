@@ -20,7 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import PartySocket from "partysocket";
 import type { ClientCommand, PrivateState, RoomPublicState, ServerEvent } from "@/modes/holdem/shared/types";
-import { TOAST_DURATION_MS } from "@/lib/constants";
+import { PLAYER_NAME_KEY, TOAST_DURATION_MS } from "@/lib/constants";
 
 export interface GameSessionValue {
   code: string;
@@ -42,7 +42,6 @@ export function useGameSession(): GameSessionValue {
   return value;
 }
 
-const nameKey = "poker-player-name";
 const tokenKey = (code: string) => `poker-session:${code}`;
 
 function downloadFile(filename: string, content: string, type: string): void {
@@ -179,7 +178,7 @@ export function GameSessionProvider({
     socketRef.current?.close();
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(tokenKey(code));
-      sessionStorage.removeItem(nameKey);
+      sessionStorage.removeItem(PLAYER_NAME_KEY);
     }
     router.push("/");
   }, [send, router, code]);

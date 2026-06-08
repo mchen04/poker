@@ -6,6 +6,7 @@ import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
 import { chips, upDownColor, upDownLabel } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { HostSettings } from "./HostSettings";
+import { ChromeButton } from "./ChromeButton";
 
 type Tab = "players" | "modes" | "log" | "chat" | "settings";
 const TABS: Tab[] = ["players", "modes", "log", "chat", "settings"];
@@ -25,7 +26,7 @@ export function SidePanel({
   const canEditSettings = !(publicState.hand && publicState.hand.phase !== "complete") && publicState.lifecycle !== "ended";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "rgba(8,26,16,0.92)", borderLeft: "1px solid rgba(201,165,74,0.2)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: D.panelDark, borderLeft: "1px solid rgba(201,165,74,0.2)" }}>
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         {TABS.map((t) => (
           <button
@@ -227,23 +228,7 @@ function ChatTab({ publicState, myId, send }: { publicState: RoomPublicState; my
 }
 
 function MiniBtn({ label, onClick, tone }: { label: string; onClick: () => void; tone?: "danger" }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 10,
-        fontWeight: 800,
-        padding: "3px 7px",
-        borderRadius: 6,
-        background: tone === "danger" ? "rgba(192,96,96,0.2)" : "rgba(255,255,255,0.07)",
-        border: `1px solid ${tone === "danger" ? "rgba(192,96,96,0.5)" : D.panelBorder}`,
-        color: tone === "danger" ? "#f0b0b0" : D.text,
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  );
+  return <ChromeButton label={label} onClick={onClick} tone={tone} size="sm" />;
 }
 
 /** Host-only inline control: add or remove chips from a player, with a reason. */
