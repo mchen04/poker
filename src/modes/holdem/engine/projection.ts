@@ -26,6 +26,8 @@ export function handToPublic(hand: HandInternal | null): HandPublic | null {
     shuffleCommitment: hand.shuffleCommitment,
     shuffleReveal: hand.shuffleReveal,
     winners: hand.winners,
-    summary: hand.summary
+    summary: hand.summary,
+    winningSeats: hand.winningSeats,
+    revealedHands: hand.revealedHands
   };
 }

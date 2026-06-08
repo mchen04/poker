@@ -73,10 +73,10 @@ export default function HomePage() {
               letterSpacing: "-0.02em",
             }}
           >
-            Ding
+            Feltline
           </h1>
           <p className="mt-2 text-[11px] font-bold tracking-[0.5em] uppercase" style={{ color: D.sub }}>
-            rank the hands · trust your read
+            private play-money poker · no rake, no accounts
           </p>
         </div>
 
@@ -159,7 +159,7 @@ export default function HomePage() {
         </div>
 
         <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#6a8a72" }}>
-          Rank every hand · a perfect board wins
+          Hold'em &amp; PLO · blinds, side pots, showdown · play-money only
         </p>
       </div>
     </div>

@@ -18,13 +18,13 @@ export default function RoomPage() {
   const [showNameModal, setShowNameModal] = useState(false);
 
   useEffect(() => {
-    const storedName = sessionStorage.getItem("ding-player-name");
+    const storedName = sessionStorage.getItem("poker-player-name");
     if (storedName) setPlayerName(storedName);
     else setShowNameModal(true);
   }, []);
 
   function handleNameSubmit(name: string) {
-    sessionStorage.setItem("ding-player-name", name);
+    sessionStorage.setItem("poker-player-name", name);
     setPlayerName(name);
     setShowNameModal(false);
   }

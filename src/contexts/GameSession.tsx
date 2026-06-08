@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * GameSession context — encapsulates the per-room socket lifecycle, masked
- * game-state updates, identity (myId), notifications, and the send helpers.
- *
- * Intent (from the GameMode-engine plan): RoomPage drops to a thin shell
- * that mounts this provider and a phase router; everything else reaches for
- * `useGameSession()` rather than threading socket props down.
+ * GameSession — per-room PartyKit socket lifecycle for poker. Owns identity
+ * (server-issued sessionToken, persisted per room for reconnect), the latest
+ * masked snapshot (public + private state), command sending, and the
+ * end-session export download. Components reach for `useGameSession()` rather
+ * than threading socket props.
  */
 
 import {
@@ -20,80 +19,42 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import PartySocket from "partysocket";
-import type { ClientMessage, GameState, Phase, ServerMessage } from "@/lib/types";
-import { findPlayerById } from "@/lib/utils";
-import { NOTIFICATION_FADE_MS } from "@/lib/constants";
-import {
-  playDingSound,
-  playFuckoffSound,
-  speakCustomOutput,
-  primeAudio,
-} from "@/lib/sound";
-
-export interface Notification {
-  id: string;
-  playerName: string;
-}
-
-export interface ChaosNotification {
-  id: string;
-  event: string;
-  affected: string[];
-  phase: Phase;
-  modeId: string;
-}
+import type { ClientCommand, PrivateState, RoomPublicState, ServerEvent } from "@/modes/holdem/shared/types";
 
 export interface GameSessionValue {
-  /** Room code (uppercased). */
   code: string;
-  /** Persistent player id (sessionStorage). */
   myId: string | null;
-  /** Latest masked game state from the server. */
-  gameState: GameState | null;
-  /** Connection error string, if any. */
+  publicState: RoomPublicState | null;
+  privateState: PrivateState | null;
   connectionError: string | null;
-  /** Whether the player has the custom-output marker. */
-  isCustom: boolean;
-
-  /** Send a typed client message over the socket. */
-  send(msg: ClientMessage): void;
-  /** Send "ding" + play local sound. */
-  ding(): void;
-  /** Send "fuckoff" + play local sound. */
-  fuckoff(): void;
-  /** Send custom output + speak locally. */
-  customOutput(text: string, rate: number, pitch: number, voiceURI?: string): void;
-  /** Leave the room: send `leave`, close socket, clear identity, navigate home. */
+  /** Transient error/notice toast text (auto-clears). */
+  notice: string | null;
+  send(cmd: ClientCommand): void;
   leave(): void;
-
-  /** Recent ding events to display as toasts. */
-  dingNotifications: Notification[];
-  /** Recent fuckoff events to display as toasts. */
-  fuckoffNotifications: Notification[];
-  /** Recent phase-effect events to display as toasts. */
-  chaosNotifications: ChaosNotification[];
 }
 
 const Ctx = createContext<GameSessionValue | null>(null);
 
 export function useGameSession(): GameSessionValue {
-  const v = useContext(Ctx);
-  if (!v) throw new Error("useGameSession must be used inside <GameSessionProvider>");
-  return v;
+  const value = useContext(Ctx);
+  if (!value) throw new Error("useGameSession must be used inside <GameSessionProvider>");
+  return value;
 }
 
-/**
- * Optional sessionStorage helpers — wrapped so we can null-check `window`
- * in non-browser contexts (SSR safety).
- */
-function getOrCreatePid(): string {
-  if (typeof window === "undefined") return "";
-  let pid = sessionStorage.getItem("ding-player-id");
-  if (!pid) {
-    pid = crypto.randomUUID();
-    sessionStorage.setItem("ding-player-id", pid);
-  }
-  return pid;
+const nameKey = "poker-player-name";
+const tokenKey = (code: string) => `poker-session:${code}`;
+
+function downloadFile(filename: string, content: string, type: string): void {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function GameSessionProvider({
@@ -106,95 +67,77 @@ export function GameSessionProvider({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [publicState, setPublicState] = useState<RoomPublicState | null>(null);
+  const [privateState, setPrivateState] = useState<PrivateState | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [dingNotifications, setDingNotifications] = useState<Notification[]>([]);
-  const [fuckoffNotifications, setFuckoffNotifications] = useState<Notification[]>([]);
-  const [chaosNotifications, setChaosNotifications] = useState<ChaosNotification[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const socketRef = useRef<PartySocket | null>(null);
-  const myNameRef = useRef<string | null>(null);
+  const myIdRef = useRef<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (gameState && myId) {
-      const me = findPlayerById(gameState.players, myId);
-      myNameRef.current = me?.name ?? null;
-    }
-  }, [gameState, myId]);
+    myIdRef.current = myId;
+  }, [myId]);
 
-  const stateRef = useRef<GameState | null>(null);
-  const myIdRef = useRef<string | null>(null);
-  useEffect(() => { stateRef.current = gameState; }, [gameState]);
-  useEffect(() => { myIdRef.current = myId; }, [myId]);
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 3200);
+  }, []);
 
   useEffect(() => {
     if (!playerName) return;
     const host = process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999";
     const socket = new PartySocket({ host, room: code });
     socketRef.current = socket;
+
     if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
-      const w = window as unknown as { __dingSend: (m: ClientMessage) => void; __dingState: () => GameState | null; __dingMyId: () => string | null };
-      w.__dingSend = (m) => socket.send(JSON.stringify(m));
-      w.__dingState = () => stateRef.current;
-      w.__dingMyId = () => myIdRef.current;
+      const w = window as unknown as Record<string, unknown>;
+      w.__pokerSend = (cmd: ClientCommand) => socket.send(JSON.stringify(cmd));
+      w.__pokerPublic = () => publicStateRef.current;
+      w.__pokerPrivate = () => privateStateRef.current;
+      w.__pokerMyId = () => myIdRef.current;
     }
 
     socket.addEventListener("open", () => {
-      const pid = getOrCreatePid();
-      socket.send(JSON.stringify({ type: "join", name: playerName, pid } satisfies ClientMessage));
+      const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem(tokenKey(code)) ?? undefined : undefined;
+      socket.send(JSON.stringify({ type: "join", name: playerName, sessionToken } satisfies ClientCommand));
     });
 
     socket.addEventListener("message", (event: MessageEvent) => {
+      let msg: ServerEvent;
       try {
-        const msg = JSON.parse(event.data as string) as ServerMessage;
-        if (msg.type === "welcome") {
-          setMyId(msg.playerId);
-        } else if (msg.type === "state") {
-          setGameState(msg.state);
-        } else if (msg.type === "ding") {
-          playDingSound();
-          const id = crypto.randomUUID();
-          setDingNotifications((prev) => [...prev, { id, playerName: msg.playerName }]);
-          setTimeout(() => {
-            setDingNotifications((prev) => prev.filter((n) => n.id !== id));
-          }, NOTIFICATION_FADE_MS);
-        } else if (msg.type === "fuckoff") {
-          if (msg.playerName !== myNameRef.current) playFuckoffSound();
-          const id = crypto.randomUUID();
-          setFuckoffNotifications((prev) => [...prev, { id, playerName: msg.playerName }]);
-          setTimeout(() => {
-            setFuckoffNotifications((prev) => prev.filter((n) => n.id !== id));
-          }, NOTIFICATION_FADE_MS);
-        } else if (msg.type === "chaos-event") {
-          const id = crypto.randomUUID();
-          setChaosNotifications((prev) => [
-            ...prev,
-            {
-              id,
-              event: msg.event,
-              affected: msg.affected,
-              phase: msg.phase,
-              modeId: msg.modeId,
-            },
-          ]);
-          setTimeout(() => {
-            setChaosNotifications((prev) => prev.filter((n) => n.id !== id));
-          }, NOTIFICATION_FADE_MS);
-        } else if (msg.type === "customOutput") {
-          if (msg.playerName !== myNameRef.current) {
-            speakCustomOutput(msg.text, msg.rate, msg.pitch, msg.voiceURI);
-          }
-        } else if (msg.type === "error") {
-          if (msg.message === "Removed by host") {
-            socketRef.current?.close();
-            router.push("/");
-            return;
-          }
-          setConnectionError(msg.message);
-        }
+        msg = JSON.parse(event.data as string) as ServerEvent;
       } catch {
-        // ignore parse errors
+        return;
+      }
+      switch (msg.type) {
+        case "welcome":
+          setMyId(msg.playerId);
+          if (typeof window !== "undefined") sessionStorage.setItem(tokenKey(code), msg.sessionToken);
+          break;
+        case "snapshot":
+          setPublicState(msg.publicState);
+          setPrivateState(msg.privateState);
+          break;
+        case "export":
+          downloadFile(`poker-session-${code}.txt`, msg.exportText, "text/plain");
+          downloadFile(`poker-session-${code}.json`, msg.exportJson, "application/json");
+          showNotice("Session exported (TXT + JSON downloaded).");
+          break;
+        case "kicked":
+          socketRef.current?.close();
+          if (typeof window !== "undefined") sessionStorage.removeItem(tokenKey(code));
+          router.push("/");
+          break;
+        case "error":
+          // Errors before we have an id are fatal join failures; after, they
+          // are gameplay rejections shown as a transient toast.
+          if (!myIdRef.current) setConnectionError(msg.message);
+          else showNotice(msg.message);
+          break;
       }
     });
 
@@ -205,58 +148,40 @@ export function GameSessionProvider({
     return () => {
       socket.close();
     };
-  }, [playerName, code, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerName, code, router, showNotice]);
 
-  const send = useCallback((msg: ClientMessage): void => {
+  // Refs mirror state for the dev hooks + closures.
+  const publicStateRef = useRef<RoomPublicState | null>(null);
+  const privateStateRef = useRef<PrivateState | null>(null);
+  useEffect(() => { publicStateRef.current = publicState; }, [publicState]);
+  useEffect(() => { privateStateRef.current = privateState; }, [privateState]);
+
+  const send = useCallback((cmd: ClientCommand): void => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(msg));
+      socketRef.current.send(JSON.stringify(cmd));
     }
   }, []);
-
-  const ding = useCallback((): void => {
-    primeAudio();
-    send({ type: "ding" });
-  }, [send]);
-
-  const fuckoff = useCallback((): void => {
-    playFuckoffSound();
-    send({ type: "fuckoff" });
-  }, [send]);
-
-  const customOutput = useCallback(
-    (text: string, rate: number, pitch: number, voiceURI?: string): void => {
-      speakCustomOutput(text, rate, pitch, voiceURI);
-      send({ type: "customOutput", text, rate, pitch, voiceURI });
-    },
-    [send]
-  );
 
   const leave = useCallback((): void => {
     send({ type: "leave" });
     socketRef.current?.close();
     if (typeof window !== "undefined") {
-      sessionStorage.removeItem("ding-player-id");
-      sessionStorage.removeItem("ding-player-name");
+      sessionStorage.removeItem(tokenKey(code));
+      sessionStorage.removeItem(nameKey);
     }
     router.push("/");
-  }, [send, router]);
-
-  const isCustom = findPlayerById(gameState?.players ?? [], myId)?.isCustom ?? false;
+  }, [send, router, code]);
 
   const value: GameSessionValue = {
     code,
     myId,
-    gameState,
+    publicState,
+    privateState,
     connectionError,
-    isCustom,
+    notice,
     send,
-    ding,
-    fuckoff,
-    customOutput,
     leave,
-    dingNotifications,
-    fuckoffNotifications,
-    chaosNotifications,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

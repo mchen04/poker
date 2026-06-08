@@ -10,8 +10,8 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Ding",
-  description: "A multiplayer poker hand ranking game",
+  title: "Feltline Poker",
+  description: "A premium private play-money home poker game for friends",
 };
 
 export const viewport: Viewport = {

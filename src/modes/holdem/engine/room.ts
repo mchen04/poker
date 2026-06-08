@@ -8,7 +8,7 @@ import { hostActionWithSupport, type HostActionPayload, type HostActionResult } 
 import { handToPublic } from './projection';
 import { eligiblePlayers, hasActiveHand, rateLimited, readyEligiblePlayers, reconcileHandParticipants, reconcileStackStatus, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant, requireReadyParticipant } from './access';
 import { shuffleDeck } from './deck';
-import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
+import { buildSidePots, rankHighHand, rankPlayers, winnerSeats } from './evaluator';
 import { buildSessionExport, finalizeStacks } from './sessionExport';
 import { defaultSettings, sanitizeSettings } from './settings';
 type PlayerStatus = PlayerPublic['status'];
@@ -113,7 +113,8 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
     committedThisHand: participant?.committedThisHand ?? 0,
     folded: participant?.folded ?? false,
     allIn: participant?.allIn ?? false,
-    badges
+    badges,
+    chipRequest: player.pendingChipRequest?.amount ?? null
   };
 }
 
@@ -494,6 +495,8 @@ function buildHand(room: RoomInternal): SocketResult {
     shuffleCommitment: commitment,
     winners: [],
     summary: '',
+    winningSeats: [],
+    revealedHands: [],
     deck,
     initialDeck,
     shuffleSeed: seed,
@@ -825,6 +828,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
   hand.phase = 'complete';
   assignTurn(hand, null);
+  hand.winningSeats = [winner.seat];
   hand.winners = awards;
   hand.summary = awards.join(' · ');
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
@@ -862,8 +866,15 @@ function showdown(room: RoomInternal): void {
       });
   }
 
+  hand.revealedHands = live.map((entry) => ({
+    seat: entry.seat,
+    playerId: entry.playerId,
+    cards: entry.holeCards,
+    handName: rankHighHand(hand.variant, entry.holeCards, hand.board).name
+  }));
   hand.phase = 'complete';
   assignTurn(hand, null);
+  hand.winningSeats = [...winningSeats];
   hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;

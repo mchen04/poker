@@ -57,7 +57,7 @@ export default function NameModal({ onSubmit }: NameModalProps) {
       <div className="relative z-10 bg-gray-900 border border-gray-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
         <div className="text-center mb-6">
           <h1 id="name-modal-title" className="text-4xl font-black tracking-tighter text-white mb-1">
-            DING
+            FELTLINE
           </h1>
           <p className="text-gray-400 text-sm">What should we call you?</p>
         </div>

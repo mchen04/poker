@@ -12,12 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "stress": "tsx scripts/poker-stress.ts",
-    "modes:gen": "tsx src/lib/gameMode/generate.ts",
-    "modes:check": "tsx src/lib/gameMode/generate.ts --check && tsx scripts/verify-mechanics.ts --strict",
-    "modes:verify": "tsx scripts/verify-mechanics.ts --strict",
-    "predev": "npm run modes:gen",
-    "prebuild": "npm run modes:gen && npm run modes:check"
+    "stress": "tsx scripts/poker-stress.ts"
   },
   "dependencies": {
     "nanoid": "^5.0.9",
@@ -39,7 +34,6 @@
     "tsx": "^4.22.0",
     "typescript": "^5",
     "vitest": "^2.1.8",
-    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }
 }

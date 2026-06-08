@@ -84,6 +84,8 @@ export interface PlayerPublic {
   folded: boolean;
   allIn: boolean;
   badges: string[];
+  /** Pending chip-request amount awaiting host approval, or null. */
+  chipRequest: number | null;
 }
 
 export interface AuditEntry {
@@ -149,6 +151,10 @@ export interface HandPublic {
   shuffleReveal?: string;
   winners: string[];
   summary: string;
+  /** Seats that won any pot this hand (for UI highlight). */
+  winningSeats: number[];
+  /** Non-folded contenders' hole cards, populated only at showdown (phase complete). */
+  revealedHands: Array<{ seat: number; playerId: string; cards: Card[]; handName: string }>;
 }
 
 export interface RoomPublicState {
