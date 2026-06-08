@@ -31,6 +31,7 @@ import type {
   RoomSettings,
   ServerSnapshot,
   ServerToClientEvents,
+  Variant
 } from '../shared/types';
 import './styles.css';
 
@@ -608,8 +609,8 @@ function emptyLegal(): LegalActions {
   };
 }
 
-function variantTitle(variant: string): string {
-  return variant === 'holdem' ? "NL Hold'em" : variant === 'omaha4' ? 'PLO' : '5-card Omaha';
+function variantTitle(variant: Variant): string {
+  return variant === 'holdem' ? "NL Hold'em" : 'PLO';
 }
 
 const send = {

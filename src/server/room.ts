@@ -52,6 +52,7 @@ export interface HandInternal extends HandPublic {
   deck: Card[];
   initialDeck: Card[];
   shuffleSeed: string;
+  fullRaiseBase: number;
   participants: Map<number, ParticipantInternal>;
 }
 
@@ -439,8 +440,7 @@ function postBlind(room: RoomInternal, hand: HandInternal, seat: number | null, 
   participant.currentBet += paid;
   participant.committedThisHand += paid;
   if (player.stack === 0) participant.allIn = true;
-  hand.currentBet = Math.max(hand.currentBet, participant.currentBet);
-  if (paid >= amount) hand.minRaise = Math.max(hand.minRaise, paid);
+  applyWagerState(hand, participant, paid >= amount && amount >= room.settings.bigBlind ? paid : 0, false);
   audit(room, 'blind.posted', `${player.name} posted ${label} ${paid}`, player.id, { seat, amount: paid, label });
 }
 
@@ -495,6 +495,7 @@ function buildHand(room: RoomInternal): SocketResult {
     currentTurnSeat: null,
     currentBet: 0,
     minRaise: room.settings.bigBlind,
+    fullRaiseBase: 0,
     board: [],
     board2: [],
     pots: [],
@@ -541,6 +542,7 @@ function buildHand(room: RoomInternal): SocketResult {
     });
     hand.currentBet = 0;
     hand.minRaise = room.settings.bigBlind;
+    hand.fullRaiseBase = 0;
     dealStreet(hand, 'flop');
     audit(room, 'modifier.applied', `Bomb pot posted ${Math.max(room.settings.bigBlind, room.settings.ante)} from each player and skipped preflop betting.`);
   }
@@ -593,7 +595,7 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
   const toCall = Math.max(0, hand.currentBet - participant.currentBet);
   const potSize = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
   const maxBet = participant.currentBet + player.stack;
-  const minRaiseTo = hand.currentBet + hand.minRaise;
+  const minRaiseTo = hand.fullRaiseBase + hand.minRaise;
   const ploMax = hand.variant === 'holdem' ? maxBet : participant.currentBet + Math.min(player.stack, potSize + toCall * 2);
   return {
     canFold: toCall > 0,
@@ -659,16 +661,8 @@ export function act(
     if (payload.action === 'bet' && amount < legal.minBet && amount < player.stack) return { ok: false, error: `Minimum bet is ${legal.minBet}.` };
     if (payload.action === 'raise' && targetBet < legal.minRaiseTo && amount < player.stack) return { ok: false, error: `Minimum raise is to ${legal.minRaiseTo}.` };
     if (amount > player.stack) return { ok: false, error: 'Bet is larger than your stack.' };
-    const previousBet = hand.currentBet;
     moveChips(player, participant, amount);
-    if (participant.currentBet > hand.currentBet) {
-      hand.currentBet = participant.currentBet;
-      hand.minRaise = Math.max(room.settings.bigBlind, hand.currentBet - previousBet);
-      hand.lastAggressorSeat = participant.seat;
-      hand.participants.forEach((entry) => {
-        if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
-      });
-    }
+    applyWagerState(hand, participant, fullRaiseSize(hand, participant.currentBet), true);
     participant.acted = true;
     audit(room, payload.action === 'bet' ? 'action.bet' : 'action.raise', `${player.name} ${payload.action === 'bet' ? 'bet' : 'raised'} ${amount}`, player.id, {
       amount,
@@ -681,19 +675,8 @@ export function act(
     if (hand.variant !== 'holdem' && allInTarget > legal.maxBet && amount > legal.callAmount) {
       return { ok: false, error: 'Pot-limit maximum is lower than all-in.' };
     }
-    const previousBet = hand.currentBet;
     moveChips(player, participant, amount);
-    if (participant.currentBet > hand.currentBet) {
-      const raiseSize = participant.currentBet - previousBet;
-      hand.currentBet = participant.currentBet;
-      if (raiseSize >= hand.minRaise) {
-        hand.minRaise = raiseSize;
-        hand.participants.forEach((entry) => {
-          if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
-        });
-      }
-      hand.lastAggressorSeat = participant.seat;
-    }
+    applyWagerState(hand, participant, fullRaiseSize(hand, participant.currentBet), true);
     participant.acted = true;
     audit(room, 'action.all_in', `${player.name} moved all-in for ${amount}`, player.id, { amount, currentBet: participant.currentBet });
   }
@@ -711,6 +694,24 @@ function moveChips(player: PlayerInternal, participant: ParticipantInternal, amo
   participant.currentBet += paid;
   participant.committedThisHand += paid;
   if (player.stack === 0) participant.allIn = true;
+}
+
+function fullRaiseSize(hand: HandInternal, targetBet: number): number {
+  return targetBet >= hand.fullRaiseBase + hand.minRaise ? targetBet - hand.fullRaiseBase : 0;
+}
+
+function applyWagerState(hand: HandInternal, participant: ParticipantInternal, fullRaise: number, resetActors: boolean): void {
+  if (participant.currentBet <= hand.currentBet) return;
+  hand.currentBet = participant.currentBet;
+  if (fullRaise <= 0) return;
+  hand.fullRaiseBase = participant.currentBet;
+  hand.minRaise = fullRaise;
+  if (resetActors) {
+    hand.lastAggressorSeat = participant.seat;
+    hand.participants.forEach((entry) => {
+      if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
+    });
+  }
 }
 
 function updatePots(hand: HandInternal): void {
@@ -766,6 +767,7 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
   hand.phase = phase;
   hand.currentBet = 0;
   hand.minRaise = room.settings.bigBlind;
+  hand.fullRaiseBase = 0;
   hand.lastAggressorSeat = null;
   hand.participants.forEach((entry) => {
     entry.currentBet = 0;

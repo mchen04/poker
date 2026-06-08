@@ -93,11 +93,37 @@ describe('room command model', () => {
     blindCaller.committedThisHand = 13;
     blindCaller.acted = true;
     hand.currentBet = 13;
+    hand.fullRaiseBase = 10;
     hand.minRaise = 10;
     hand.currentTurnSeat = caller.seat;
     const legal = snapshot(room, players[0].id).privateState!.legalActions;
     expect(legal.canCall).toBe(true);
     expect(legal.canRaise).toBe(false);
+  });
+
+  it('keeps min-raise target anchored after a short all-in action', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const fullBet = hand.participants.get(players[0].seat!)!;
+    const shortAllIn = hand.participants.get(players[1].seat!)!;
+    const unacted = hand.participants.get(players[2].seat!)!;
+    fullBet.currentBet = 10;
+    fullBet.committedThisHand = 10;
+    fullBet.acted = true;
+    shortAllIn.currentBet = 13;
+    shortAllIn.committedThisHand = 13;
+    shortAllIn.allIn = true;
+    shortAllIn.acted = true;
+    unacted.currentBet = 0;
+    unacted.acted = false;
+    hand.currentBet = 13;
+    hand.fullRaiseBase = 10;
+    hand.minRaise = 10;
+    hand.currentTurnSeat = unacted.seat;
+    const legal = snapshot(room, players[2].id).privateState!.legalActions;
+    expect(legal.canRaise).toBe(true);
+    expect(legal.minRaiseTo).toBe(20);
   });
 
   it('times out and advances when the current actor disconnects mid-hand', () => {
@@ -217,6 +243,19 @@ describe('room command model', () => {
     expect(legal.minRaiseTo).toBe(40);
   });
 
+  it('does not inflate min-raise target from a short all-in straddle', () => {
+    const { room, host } = setupThreePlayers();
+    host.stack = 15;
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    expect(hand.straddleSeat).toBe(host.seat);
+    expect(hand.currentBet).toBe(15);
+    expect(hand.fullRaiseBase).toBe(10);
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    const legal = snapshot(room, actor.id).privateState!.legalActions;
+    expect(legal.minRaiseTo).toBe(20);
+  });
+
   it('treats raise amounts as target totals, not extra chips', () => {
     const { room, host } = setupThreePlayers();
     expect(startGame(room, host).ok).toBe(true);
@@ -225,7 +264,7 @@ describe('room command model', () => {
     const participant = hand.participants.get(actor.seat!)!;
     const legal = snapshot(room, actor.id).privateState!.legalActions;
     expect(participant.currentBet).toBeGreaterThan(0);
-    expect(legal.minRaiseTo).toBe(hand.currentBet + hand.minRaise);
+    expect(legal.minRaiseTo).toBe(hand.fullRaiseBase + hand.minRaise);
     expect(act(room, actor, { action: 'raise', amount: legal.minRaiseTo, nonce: hand.actionNonce }).ok).toBe(true);
     expect(participant.currentBet).toBe(legal.minRaiseTo);
   });
