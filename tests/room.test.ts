@@ -350,6 +350,27 @@ describe('room command model', () => {
     expect(room.queuedMode).toBeNull();
   });
 
+  it('requires even creator-only custom queues to come from an active table player', () => {
+    const created = createRoom('Host', 'Creator Queue');
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error('create failed');
+    const room = getRoom(created.code)!;
+    const host = playerInRoom(room, created.playerId)!;
+    host.socketIds.add('creator-queue-host');
+    expect(updateSettings(room, host, { custom: { permission: 'creator_only', cooldownHands: 0 } }).ok).toBe(true);
+    expect(queueMode(room, host, 'omaha4').ok).toBe(false);
+    expect(sit(room, host, 0).ok).toBe(true);
+    const joined = joinRoom(room.code, 'Ari');
+    expect(joined.ok).toBe(true);
+    if (!joined.ok) throw new Error('join failed');
+    const ari = playerInRoom(room, joined.playerId)!;
+    ari.socketIds.add('creator-queue-ari');
+    expect(sit(room, ari, 1).ok).toBe(true);
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: host.id }).ok).toBe(true);
+    expect(queueMode(room, host, 'omaha4').ok).toBe(false);
+    expect(room.queuedMode).toBeNull();
+  });
+
   it('preserves forced sit-out across sit attempts and reconnects until host restores it', () => {
     const { room, host, players } = setupThreePlayers();
     const target = players[1];

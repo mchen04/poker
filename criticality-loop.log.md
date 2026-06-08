@@ -18,3 +18,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 9 | BLOCK | 0/2/0 | 1 | +21 | pass | fixed disconnected turn rotation timeout and emptySince-based idle room cleanup |
 | 10 | BLOCK | 1/2/0 | 1 | +108 | pass | made ended sessions read-only/idempotent, restricted player-driven custom queues, and preserved forced sit-out across reconnect |
 | 11 | BLOCK | 0/2/0 | 1 | +49 | pass | skipped ended-room disconnect writes and centralized connected seated-with-chips eligibility |
+| 12 | BLOCK | 0/1/0 | 1 | +17 | pass | applied connected seated-with-chips eligibility to creator-only custom queues |

@@ -937,16 +937,12 @@ const hostSupport = { activeHand: hasActiveHand, audit, requireHost };
 export function queueMode(room: RoomInternal, player: PlayerInternal, mode: CustomModeName): SocketResult {
   const lifecycleError = requireMutableRoom(room);
   if (lifecycleError) return lifecycleError;
-  const accessError = requireActivePlayer(player);
-  if (accessError) return accessError;
+  const queueError = requireQueueParticipant(player);
+  if (queueError) return queueError;
   const error = validateMode(room.settings, mode);
   if (error) return { ok: false, error };
   if (room.queuedMode) return { ok: false, error: `${room.queuedMode.label} is already queued.` };
   if (room.settings.custom.permission === 'creator_only' && !player.isHost) return { ok: false, error: 'Only host can queue modes.' };
-  if (room.settings.custom.permission !== 'creator_only') {
-    const queueError = requireQueueParticipant(player);
-    if (queueError) return queueError;
-  }
   if (room.settings.custom.permission === 'button' && room.hand?.buttonSeat !== player.seat) return { ok: false, error: 'Only the button can queue this hand.' };
   if (room.nextHandNumber - player.lastCustomHand < room.settings.custom.cooldownHands) return { ok: false, error: 'Custom mode cooldown is still active.' };
   room.queuedMode = buildQueuedMode(mode, player.id, player.name, room.nextHandNumber);
