@@ -25,3 +25,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 16 | BLOCK | 0/1/1 | 1 | +0 | pass | renamed custom queue permission to cooldown semantics and updated ready-start docs |
 | 17 | BLOCK | 0/2/0 | 1 | +17 | pass | fixed live straddle min-raise and PLO all-in target-cap validation |
 | 18 | BLOCK | 0/3/0 | 1 | +42 | pass | split full-raise base from current bet and removed unsupported variant label fallback |
+| 19 | APPROVE | 0/0/0 | 0 | +0 | pass | first clean fresh-context audit |
