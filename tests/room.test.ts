@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, createRoom, getRoom, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame } from '../src/server/room';
+import { act, createRoom, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
 function setupThreePlayers() {
   const created = createRoom('Host', 'Test Room');
@@ -63,5 +63,36 @@ describe('room command model', () => {
     expect(hand.currentTurnSeat).toBe(expectedFirst);
     const firstPlayer = [...room.players.values()].find((player) => player.seat === expectedFirst)!;
     expect(snapshot(room, firstPlayer.id).privateState?.legalActions.canCall).toBe(true);
+  });
+
+  it('rejects starting a new hand while another hand is active', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const secondStart = startGame(room, host);
+    expect(secondStart.ok).toBe(false);
+  });
+
+  it('rejects destructive host moderation while a hand is active', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const kicked = hostAction(room, host, { action: 'kick', playerId: players[1].id });
+    expect(kicked.ok).toBe(false);
+    expect(room.hand?.participants.has(players[1].seat!)).toBe(true);
+  });
+
+  it('clamps nested settings patches and finalized ledger math', () => {
+    const { room, host } = setupThreePlayers();
+    const settings = updateSettings(room, host, {
+      straddle: { amount: -500 },
+      custom: { cooldownHands: -9, allowedModes: ['omaha4'] },
+      sevenTwo: { bounty: -20, suitedBonus: -10 }
+    });
+    expect(settings.ok).toBe(true);
+    expect(room.settings.straddle.amount).toBe(0);
+    expect(room.settings.custom.cooldownHands).toBe(0);
+    expect(room.settings.sevenTwo.bounty).toBe(0);
+    const ended = endSession(room, host);
+    expect(ended.ok).toBe(true);
+    if (ended.ok) expect(ended.exportText).toContain('Host: buy-ins 1000, stack 1000, cash-out 1000, up/down 0');
   });
 });

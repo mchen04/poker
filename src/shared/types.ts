@@ -20,12 +20,11 @@ export type ChipMode = 'strict' | 'casual';
 export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | 'waiting_bb' | 'busted';
 export type HandPhase = 'idle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
 export type Variant = 'holdem' | 'omaha4' | 'omaha5';
-export type CustomPermission = 'creator_only' | 'button' | 'next_player' | 'everyone_once_per_orbit';
+export type CustomPermission = 'creator_only' | 'button' | 'everyone_once_per_orbit';
 export type CustomModeName = 'holdem' | 'omaha4' | 'omaha5' | 'bomb_pot' | 'double_board' | 'show_one' | 'seven_two';
 
 export interface RoomSettings {
   roomName: string;
-  password?: string;
   smallBlind: number;
   bigBlind: number;
   ante: number;
@@ -42,8 +41,7 @@ export interface RoomSettings {
   straddle: {
     enabled: boolean;
     amount: number;
-    mode: 'off' | 'utg' | 'button' | 'mississippi';
-    restraddleCap: number;
+    mode: 'off' | 'utg' | 'button';
   };
   custom: {
     enabled: boolean;
@@ -57,9 +55,14 @@ export interface RoomSettings {
     showdownOnly: boolean;
     suitedBonus: number;
   };
-  runItTwice: boolean;
   largeBetThresholdPct: number;
 }
+
+export type RoomSettingsPatch = Partial<Omit<RoomSettings, 'straddle' | 'custom' | 'sevenTwo'>> & {
+  straddle?: Partial<RoomSettings['straddle']>;
+  custom?: Partial<RoomSettings['custom']>;
+  sevenTwo?: Partial<RoomSettings['sevenTwo']>;
+};
 
 export interface PlayerPublic {
   id: string;
@@ -80,8 +83,6 @@ export interface PlayerPublic {
   folded: boolean;
   allIn: boolean;
   badges: string[];
-  missedSmallBlind: boolean;
-  missedBigBlind: boolean;
 }
 
 export interface AuditEntry {
@@ -200,10 +201,10 @@ export interface ClientToServerEvents {
     ack: (result: SocketResult<{ code: string; playerId: string; sessionToken: string }>) => void
   ) => void;
   joinRoom: (
-    payload: { code: string; name: string; password?: string; sessionToken?: string; spectator?: boolean },
+    payload: { code: string; name: string; sessionToken?: string; spectator?: boolean },
     ack: (result: SocketResult<{ code: string; playerId: string; sessionToken: string }>) => void
   ) => void;
-  updateSettings: (payload: Partial<RoomSettings>, ack: (result: SocketResult) => void) => void;
+  updateSettings: (payload: RoomSettingsPatch, ack: (result: SocketResult) => void) => void;
   sit: (payload: { seat: number }, ack: (result: SocketResult) => void) => void;
   ready: (payload: { ready: boolean }, ack: (result: SocketResult) => void) => void;
   startGame: (payload: Record<string, never>, ack: (result: SocketResult) => void) => void;

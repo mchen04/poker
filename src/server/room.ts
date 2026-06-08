@@ -6,7 +6,6 @@ import type {
   AuditEntry,
   Card,
   ChatEntry,
-  ClientToServerEvents,
   CustomModeName,
   HandPhase,
   HandPublic,
@@ -16,16 +15,19 @@ import type {
   QueuedCustomMode,
   RoomPublicState,
   RoomSettings,
+  RoomSettingsPatch,
   ServerSnapshot,
   SocketResult,
   Variant
 } from '../shared/types';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
-
+import { makeCode } from './roomCode';
+import { buildSessionExport, finalizeStacks } from './sessionExport';
+import { defaultSettings, sanitizeSettings } from './settings';
 type PlayerStatus = PlayerPublic['status'];
 
-interface PlayerInternal {
+export interface PlayerInternal {
   id: string;
   sessionToken: string;
   socketIds: Set<string>;
@@ -40,15 +42,13 @@ interface PlayerInternal {
   cashOut: number;
   ready: boolean;
   status: PlayerStatus;
-  missedSmallBlind: boolean;
-  missedBigBlind: boolean;
   pendingChipRequest?: { amount: number; reason: string; at: number };
   chatTimestamps: number[];
   actionTimestamps: number[];
   lastCustomHand: number;
 }
 
-interface ParticipantInternal {
+export interface ParticipantInternal {
   playerId: string;
   seat: number;
   holeCards: Card[];
@@ -60,13 +60,13 @@ interface ParticipantInternal {
   timedOut: boolean;
 }
 
-interface HandInternal extends HandPublic {
+export interface HandInternal extends HandPublic {
   deck: Card[];
   shuffleSeed: string;
   participants: Map<number, ParticipantInternal>;
 }
 
-interface RoomInternal {
+export interface RoomInternal {
   code: string;
   createdAt: number;
   hostId: string;
@@ -83,52 +83,7 @@ interface RoomInternal {
   bannedTokens: Set<string>;
   endedExport?: { exportText: string; exportJson: string };
 }
-
 export const rooms = new Map<string, RoomInternal>();
-
-export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
-  return {
-    roomName,
-    smallBlind: 5,
-    bigBlind: 10,
-    ante: 0,
-    buyIn: 1000,
-    startingStack: 1000,
-    minSeats: 2,
-    maxSeats: 9,
-    actionTimerSeconds: 30,
-    autoApproveChips: false,
-    selfServiceChips: true,
-    chipMode: 'strict',
-    locked: false,
-    spectatorsAllowed: true,
-    straddle: {
-      enabled: true,
-      amount: 20,
-      mode: 'utg',
-      restraddleCap: 1
-    },
-    custom: {
-      enabled: true,
-      permission: 'everyone_once_per_orbit',
-      cooldownHands: 4,
-      allowedModes: ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two']
-    },
-    sevenTwo: {
-      enabled: true,
-      bounty: 25,
-      showdownOnly: false,
-      suitedBonus: 25
-    },
-    runItTwice: false,
-    largeBetThresholdPct: 75
-  };
-}
-
-function makeCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-}
 
 function audit(room: RoomInternal, type: string, message: string, actor?: string, data?: Record<string, unknown>): void {
   room.audit.push({ id: nanoid(8), at: Date.now(), type, actor, message, data });
@@ -161,16 +116,14 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
     stack: player.stack,
     buyInTotal: player.buyInTotal,
     cashOut: player.cashOut,
-    upDown: player.stack + player.cashOut - player.buyInTotal,
+    upDown: (room.lifecycle === 'ended' ? player.cashOut : player.stack) - player.buyInTotal,
     ready: player.ready,
     status: player.status,
     currentBet: participant?.currentBet ?? 0,
     committedThisHand: participant?.committedThisHand ?? 0,
     folded: participant?.folded ?? false,
     allIn: participant?.allIn ?? false,
-    badges,
-    missedSmallBlind: player.missedSmallBlind,
-    missedBigBlind: player.missedBigBlind
+    badges
   };
 }
 
@@ -261,8 +214,6 @@ export function createRoom(nameInput: string, roomNameInput?: string): SocketRes
     cashOut: 0,
     ready: true,
     status: 'seated',
-    missedSmallBlind: false,
-    missedBigBlind: false,
     chatTimestamps: [],
     actionTimestamps: [],
     lastCustomHand: -999
@@ -294,7 +245,6 @@ export function createRoom(nameInput: string, roomNameInput?: string): SocketRes
 export function joinRoom(
   codeInput: string,
   nameInput: string,
-  password?: string,
   sessionToken?: string,
   spectator = false
 ): SocketResult<{ code: string; playerId: string; sessionToken: string }> {
@@ -302,7 +252,6 @@ export function joinRoom(
   const room = rooms.get(code);
   if (!room) return { ok: false, error: 'Room not found.' };
   if (room.settings.locked && !sessionToken) return { ok: false, error: 'Room is locked.' };
-  if (room.settings.password && room.settings.password !== password) return { ok: false, error: 'Wrong room password.' };
   if (sessionToken && room.bannedTokens.has(sessionToken)) return { ok: false, error: 'This browser is banned from the room.' };
   if (spectator && !room.settings.spectatorsAllowed) return { ok: false, error: 'Spectators are off.' };
 
@@ -332,8 +281,6 @@ export function joinRoom(
     cashOut: 0,
     ready: false,
     status: spectator ? 'sitting_out' : 'seated',
-    missedSmallBlind: false,
-    missedBigBlind: false,
     chatTimestamps: [],
     actionTimestamps: [],
     lastCustomHand: -999
@@ -378,8 +325,11 @@ function requireHost(room: RoomInternal, player: PlayerInternal): { ok: false; e
   if (room.hostId !== player.id || !player.isHost) return { ok: false, error: 'Only the host can do that.' };
   return null;
 }
+function hasActiveHand(room: RoomInternal): boolean {
+  return Boolean(room.hand && room.hand.phase !== 'complete');
+}
 
-export function updateSettings(room: RoomInternal, player: PlayerInternal, patch: Partial<RoomSettings>): SocketResult {
+export function updateSettings(room: RoomInternal, player: PlayerInternal, patch: RoomSettingsPatch): SocketResult {
   const hostError = requireHost(room, player);
   if (hostError) return hostError;
   if (room.lifecycle === 'playing' && room.hand && room.hand.phase !== 'complete') {
@@ -387,24 +337,7 @@ export function updateSettings(room: RoomInternal, player: PlayerInternal, patch
     return { ok: false, error: 'Setting changes apply between hands. Pause or finish the hand first.' };
   }
 
-  const current = room.settings;
-  const next: RoomSettings = {
-    ...current,
-    ...patch,
-    roomName: cleanName(patch.roomName ?? current.roomName) || current.roomName,
-    smallBlind: clampInt(patch.smallBlind, 1, 100000, current.smallBlind),
-    bigBlind: clampInt(patch.bigBlind, 2, 200000, current.bigBlind),
-    ante: clampInt(patch.ante, 0, 100000, current.ante),
-    buyIn: clampInt(patch.buyIn, 1, 10000000, current.buyIn),
-    startingStack: clampInt(patch.startingStack, 1, 10000000, current.startingStack),
-    minSeats: clampInt(patch.minSeats, 2, 10, current.minSeats),
-    maxSeats: clampInt(patch.maxSeats, 2, 10, current.maxSeats),
-    actionTimerSeconds: clampInt(patch.actionTimerSeconds, 5, 180, current.actionTimerSeconds),
-    straddle: { ...current.straddle, ...patch.straddle },
-    custom: { ...current.custom, ...patch.custom },
-    sevenTwo: { ...current.sevenTwo, ...patch.sevenTwo }
-  };
-  next.bigBlind = Math.max(next.bigBlind, next.smallBlind);
+  const next = sanitizeSettings(room.settings, patch);
   room.settings = next;
   if (room.seats.length !== next.maxSeats) {
     const existing = room.seats.slice(0, next.maxSeats);
@@ -573,6 +506,7 @@ export function startGame(room: RoomInternal, player: PlayerInternal): SocketRes
   const hostError = requireHost(room, player);
   if (hostError) return hostError;
   if (room.lifecycle === 'ended') return { ok: false, error: 'Session already ended.' };
+  if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish the active hand before starting another.' };
   return buildHand(room);
 }
 
@@ -989,6 +923,10 @@ export function hostAction(
   }
   const target = payload.playerId ? room.players.get(payload.playerId) : null;
   if (!target) return { ok: false, error: 'Player not found.' };
+  if ((payload.action === 'kick' || payload.action === 'ban' || payload.action === 'forceSitOut' || payload.action === 'transferHost') && hasActiveHand(room)) {
+    audit(room, 'host.action_rejected', `Rejected ${payload.action} during active hand`, host.id, { targetId: target.id });
+    return { ok: false, error: 'Finish the active hand before changing seats, sit-out state, or host ownership.' };
+  }
   if (payload.action === 'transferHost') {
     host.isHost = false;
     target.isHost = true;
@@ -1049,25 +987,10 @@ export function endSession(room: RoomInternal, host: PlayerInternal): SocketResu
   if (hostError) return hostError;
   if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish or pause the hand before ending the session.' };
   room.lifecycle = 'ended';
-  room.players.forEach((player) => {
-    if (player.seat !== null) player.cashOut = player.stack;
-  });
+  finalizeStacks(room);
   audit(room, 'session.ended', `${host.name} ended the session and generated export`, host.id);
   const exportJson = JSON.stringify(publicState(room), null, 2);
-  const lines = [
-    `Feltline private play-money session ${room.code}`,
-    `Room: ${room.settings.roomName}`,
-    `Created: ${new Date(room.createdAt).toISOString()}`,
-    '',
-    'Ledger',
-    ...[...room.players.values()].map((player) => `${player.name}: buy-ins ${player.buyInTotal}, stack ${player.stack}, cash-out ${player.cashOut}, up/down ${player.stack + player.cashOut - player.buyInTotal}`),
-    '',
-    'Audit',
-    ...room.audit.map((entry) => `${new Date(entry.at).toISOString()} [${entry.type}] ${entry.message}`)
-  ];
-  const exportText = lines.join('\n');
+  const { exportText } = buildSessionExport(room, exportJson);
   room.endedExport = { exportText, exportJson };
   return { ok: true, exportText, exportJson };
 }
-
-export type RoomCommandName = keyof ClientToServerEvents;

@@ -23,6 +23,7 @@ import { cardLabel } from '../shared/cards';
 import { modeLabel } from '../shared/modes';
 import type {
   ClientToServerEvents,
+  Card,
   CustomModeName,
   LegalActions,
   PlayerPublic,
@@ -30,7 +31,6 @@ import type {
   RoomSettings,
   ServerSnapshot,
   ServerToClientEvents,
-  SocketResult
 } from '../shared/types';
 import './styles.css';
 
@@ -79,7 +79,7 @@ function App() {
 
   const reconnect = () => {
     if (!stored) return;
-    emit('joinRoom', { code: stored.code, name: 'Reconnecting', sessionToken: stored.sessionToken }, (result) => {
+    send.joinRoom({ code: stored.code, name: 'Reconnecting', sessionToken: stored.sessionToken }, (result) => {
       if (!result.ok) setNotice(result.error);
     });
   };
@@ -143,7 +143,7 @@ function CreateRoom({ back, setNotice }: { back: () => void; setNotice: (message
       <button
         className="primary"
         onClick={() =>
-          emit('createRoom', { name, roomName }, (result) => {
+          send.createRoom({ name, roomName }, (result) => {
             if (!result.ok) setNotice(result.error);
           })
         }
@@ -177,7 +177,7 @@ function JoinRoom({ back, setNotice, stored }: { back: () => void; setNotice: (m
       <button
         className="primary"
         onClick={() =>
-          emit('joinRoom', { code: extractCode(code), name, spectator, sessionToken: stored?.code === extractCode(code) ? stored.sessionToken : undefined }, (result) => {
+          send.joinRoom({ code: extractCode(code), name, spectator, sessionToken: stored?.code === extractCode(code) ? stored.sessionToken : undefined }, (result) => {
             if (!result.ok) setNotice(result.error);
           })
         }
@@ -276,7 +276,7 @@ function TableView({
   }
 
   const submit = (action: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in', amount?: number) => {
-    emit('act', { action, amount, nonce: hand.actionNonce }, (result) => {
+    send.act({ action, amount, nonce: hand.actionNonce }, (result) => {
       if (!result.ok) setNotice(result.error);
     });
   };
@@ -351,7 +351,7 @@ function TableView({
   );
 }
 
-function Board({ cards, label }: { cards: string[]; label: string }) {
+function Board({ cards, label }: { cards: Card[]; label: string }) {
   return (
     <div className="board-row" aria-label={label}>
       <span>{label}</span>
@@ -360,9 +360,9 @@ function Board({ cards, label }: { cards: string[]; label: string }) {
   );
 }
 
-function CardPip({ card, privateCard = false }: { card: string; privateCard?: boolean }) {
+function CardPip({ card, privateCard = false }: { card: Card; privateCard?: boolean }) {
   const red = card.endsWith('h') || card.endsWith('d');
-  return <div className={`card ${red ? 'red' : 'black'} ${privateCard ? 'private' : ''}`}>{cardLabel(card as never)}</div>;
+  return <div className={`card ${red ? 'red' : 'black'} ${privateCard ? 'private' : ''}`}>{cardLabel(card)}</div>;
 }
 
 function SeatPanel({ player, active, me }: { player: PlayerPublic; active: boolean; me: boolean }) {
@@ -393,7 +393,7 @@ function LobbyView({ room, me, setNotice }: { room: RoomPublicState; me?: Player
               key={seat}
               className={`seat-choice ${player ? 'occupied' : ''}`}
               disabled={Boolean(player)}
-              onClick={() => emit('sit', { seat }, (result) => !result.ok && setNotice(result.error))}
+              onClick={() => send.sit({ seat }, (result) => !result.ok && setNotice(result.error))}
             >
               <span>Seat {seat + 1}</span>
               <strong>{player?.name ?? 'Open'}</strong>
@@ -414,10 +414,10 @@ function LobbyView({ room, me, setNotice }: { room: RoomPublicState; me?: Player
 function LobbyStart({ room, me, setNotice }: { room: RoomPublicState; me?: PlayerPublic; setNotice: (message: string) => void }) {
   return (
     <div className="control-strip">
-      <button disabled={!me?.isHost} className="primary" onClick={() => emit('startGame', {}, (result) => !result.ok && setNotice(result.error))}>
+      <button disabled={!me?.isHost} className="primary" onClick={() => send.startGame({}, (result) => !result.ok && setNotice(result.error))}>
         <Play size={18} /> Start hand
       </button>
-      <button onClick={() => emit('ready', { ready: !me?.ready }, (result) => !result.ok && setNotice(result.error))}>
+      <button onClick={() => send.ready({ ready: !me?.ready }, (result) => !result.ok && setNotice(result.error))}>
         <Check size={18} /> {me?.ready ? 'Ready' : 'Mark ready'}
       </button>
       <span>{room.players.filter((player) => player.seat !== null && player.stack > 0).length}/{room.settings.minSeats} seated</span>
@@ -434,13 +434,13 @@ function ChipControls({ room, me, setNotice }: { room: RoomPublicState; me?: Pla
       <div className="inline-form">
         <input type="number" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
         <input value={reason} onChange={(event) => setReason(event.target.value)} />
-        <button onClick={() => emit('requestChips', { amount, reason }, (result) => !result.ok && setNotice(result.error))}>Request</button>
+        <button onClick={() => send.requestChips({ amount, reason }, (result) => !result.ok && setNotice(result.error))}>Request</button>
       </div>
       {me?.isHost &&
         room.players
           .filter((player) => player.badges.includes('Chip request'))
           .map((player) => (
-            <button key={player.id} onClick={() => emit('approveChips', { playerId: player.id, amount, reason: 'host approved' }, (result) => !result.ok && setNotice(result.error))}>
+            <button key={player.id} onClick={() => send.approveChips({ playerId: player.id, amount, reason: 'host approved' }, (result) => !result.ok && setNotice(result.error))}>
               Approve {player.name}
             </button>
           ))}
@@ -468,20 +468,20 @@ function HostControls({ room, setNotice }: { room: RoomPublicState; setNotice: (
     <div className="panel-block">
       <h2><Crown size={18} /> Host</h2>
       <div className="control-strip wrap">
-        <button onClick={() => emit('hostAction', { action: 'lock', value: !room.settings.locked }, (result) => !result.ok && setNotice(result.error))}>
+        <button onClick={() => send.hostAction({ action: 'lock', value: !room.settings.locked }, (result) => !result.ok && setNotice(result.error))}>
           <Lock size={16} /> {room.settings.locked ? 'Unlock' : 'Lock'}
         </button>
-        <button onClick={() => emit('hostAction', { action: 'spectators', value: !room.settings.spectatorsAllowed }, (result) => !result.ok && setNotice(result.error))}>
+        <button onClick={() => send.hostAction({ action: 'spectators', value: !room.settings.spectatorsAllowed }, (result) => !result.ok && setNotice(result.error))}>
           <Eye size={16} /> Spectators {room.settings.spectatorsAllowed ? 'on' : 'off'}
         </button>
       </div>
       {room.players.filter((player) => !player.isHost).map((player) => (
         <div className="moderation-row" key={player.id}>
           <span>{player.name}</span>
-          <button onClick={() => emit('hostAction', { action: 'mute', playerId: player.id, value: !player.muted }, (result) => !result.ok && setNotice(result.error))}>Mute</button>
-          <button onClick={() => emit('hostAction', { action: 'forceSitOut', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Sit out</button>
-          <button onClick={() => emit('hostAction', { action: 'transferHost', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Host</button>
-          <button className="danger" onClick={() => emit('hostAction', { action: 'kick', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>
+          <button onClick={() => send.hostAction({ action: 'mute', playerId: player.id, value: !player.muted }, (result) => !result.ok && setNotice(result.error))}>Mute</button>
+          <button onClick={() => send.hostAction({ action: 'forceSitOut', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Sit out</button>
+          <button onClick={() => send.hostAction({ action: 'transferHost', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Host</button>
+          <button className="danger" onClick={() => send.hostAction({ action: 'kick', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>
             <Ban size={14} />
           </button>
         </div>
@@ -497,7 +497,7 @@ function QueueModes({ room, setNotice }: { room: RoomPublicState; setNotice: (me
       <h2><Zap size={18} /> Custom queue</h2>
       <div className="mode-buttons">
         {modes.map((mode) => (
-          <button key={mode} disabled={!room.settings.custom.enabled || Boolean(room.queuedMode)} onClick={() => emit('queueMode', { mode }, (result) => !result.ok && setNotice(result.error))}>
+          <button key={mode} disabled={!room.settings.custom.enabled || Boolean(room.queuedMode)} onClick={() => send.queueMode({ mode }, (result) => !result.ok && setNotice(result.error))}>
             {modeLabel(mode)}
           </button>
         ))}
@@ -522,7 +522,7 @@ function SettingsView({ room, isHost, setNotice }: { room: RoomPublicState; isHo
       <label className="toggle-line"><input type="checkbox" checked={settings.straddle.enabled} onChange={(event) => setSettings({ ...settings, straddle: { ...settings.straddle, enabled: event.target.checked } })} /> UTG straddle</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.custom.enabled} onChange={(event) => setSettings({ ...settings, custom: { ...settings.custom, enabled: event.target.checked } })} /> Custom queue on</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.sevenTwo.enabled} onChange={(event) => setSettings({ ...settings, sevenTwo: { ...settings.sevenTwo, enabled: event.target.checked } })} /> 7-2 bounty</label>
-      <button disabled={!isHost} className="primary" onClick={() => emit('updateSettings', settings, (result) => !result.ok && setNotice(result.error))}>
+      <button disabled={!isHost} className="primary" onClick={() => send.updateSettings(settings, (result) => !result.ok && setNotice(result.error))}>
         <Settings size={18} /> Apply settings
       </button>
       <p className="boundary wide">Major setting changes are rejected during active hands and audit logged. Chip mode defaults to strict table-stakes accounting.</p>
@@ -566,7 +566,7 @@ function AuditView({ room }: { room: RoomPublicState }) {
         ))}
         <div className="inline-form">
           <input value={chat} onChange={(event) => setChat(event.target.value)} maxLength={240} />
-          <button onClick={() => emit('chat', { message: chat }, (result) => { if (!result.ok) return; setChat(''); })}>Send</button>
+          <button onClick={() => send.chat({ message: chat }, (result) => { if (!result.ok) return; setChat(''); })}>Send</button>
         </div>
       </section>
     </div>
@@ -578,7 +578,7 @@ function EndSession({ setNotice }: { setNotice: (message: string) => void }) {
     <button
       className="ghost"
       onClick={() =>
-        emit('endSession', {}, (result) => {
+        send.endSession({}, (result) => {
           if (!result.ok) return setNotice(result.error);
           download('feltline-session.txt', result.exportText, 'text/plain');
           download('feltline-session.json', result.exportJson, 'application/json');
@@ -611,9 +611,47 @@ function variantTitle(variant: string): string {
   return variant === 'holdem' ? "NL Hold'em" : variant === 'omaha4' ? 'PLO' : '5-card Omaha';
 }
 
-function emit(event: keyof ClientToServerEvents, payload: unknown, ack: (result: SocketResult<any>) => void) {
-  (socket.emit as any)(event, payload, ack);
-}
+const send = {
+  createRoom(payload: Parameters<ClientToServerEvents['createRoom']>[0], ack: Parameters<ClientToServerEvents['createRoom']>[1]) {
+    socket.emit('createRoom', payload, ack);
+  },
+  joinRoom(payload: Parameters<ClientToServerEvents['joinRoom']>[0], ack: Parameters<ClientToServerEvents['joinRoom']>[1]) {
+    socket.emit('joinRoom', payload, ack);
+  },
+  updateSettings(payload: Parameters<ClientToServerEvents['updateSettings']>[0], ack: Parameters<ClientToServerEvents['updateSettings']>[1]) {
+    socket.emit('updateSettings', payload, ack);
+  },
+  sit(payload: Parameters<ClientToServerEvents['sit']>[0], ack: Parameters<ClientToServerEvents['sit']>[1]) {
+    socket.emit('sit', payload, ack);
+  },
+  ready(payload: Parameters<ClientToServerEvents['ready']>[0], ack: Parameters<ClientToServerEvents['ready']>[1]) {
+    socket.emit('ready', payload, ack);
+  },
+  startGame(payload: Parameters<ClientToServerEvents['startGame']>[0], ack: Parameters<ClientToServerEvents['startGame']>[1]) {
+    socket.emit('startGame', payload, ack);
+  },
+  act(payload: Parameters<ClientToServerEvents['act']>[0], ack: Parameters<ClientToServerEvents['act']>[1]) {
+    socket.emit('act', payload, ack);
+  },
+  requestChips(payload: Parameters<ClientToServerEvents['requestChips']>[0], ack: Parameters<ClientToServerEvents['requestChips']>[1]) {
+    socket.emit('requestChips', payload, ack);
+  },
+  approveChips(payload: Parameters<ClientToServerEvents['approveChips']>[0], ack: Parameters<ClientToServerEvents['approveChips']>[1]) {
+    socket.emit('approveChips', payload, ack);
+  },
+  queueMode(payload: Parameters<ClientToServerEvents['queueMode']>[0], ack: Parameters<ClientToServerEvents['queueMode']>[1]) {
+    socket.emit('queueMode', payload, ack);
+  },
+  hostAction(payload: Parameters<ClientToServerEvents['hostAction']>[0], ack: Parameters<ClientToServerEvents['hostAction']>[1]) {
+    socket.emit('hostAction', payload, ack);
+  },
+  chat(payload: Parameters<ClientToServerEvents['chat']>[0], ack: Parameters<ClientToServerEvents['chat']>[1]) {
+    socket.emit('chat', payload, ack);
+  },
+  endSession(payload: Parameters<ClientToServerEvents['endSession']>[0], ack: Parameters<ClientToServerEvents['endSession']>[1]) {
+    socket.emit('endSession', payload, ack);
+  }
+};
 
 function extractCode(input: string): string {
   try {
