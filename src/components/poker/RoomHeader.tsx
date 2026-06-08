@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RoomPublicState } from "@/modes/holdem/shared/types";
 import { END_GAME_CONFIRM_MS } from "@/lib/constants";
 import { D } from "@/lib/theme";
@@ -29,7 +29,14 @@ export function RoomHeader({
   const [copied, setCopied] = useState(false);
   const [endArmed, setEndArmed] = useState(false);
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seated = publicState.players.filter((p) => p.seat !== null).length;
+
+  // Clear pending confirm/copied timers on unmount (avoids setState-after-unmount).
+  useEffect(() => () => {
+    if (endTimer.current) clearTimeout(endTimer.current);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
 
   function handleEnd() {
     if (endArmed) {
@@ -48,7 +55,8 @@ export function RoomHeader({
     navigator.clipboard?.writeText(window.location.href).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), COPIED_RESET_MS);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
       },
       () => undefined
     );

@@ -18,6 +18,11 @@ export function modeLabel(mode: CustomModeName): string {
   }
 }
 
+/** Canonical display label for a dealt hand's variant (single source of truth). */
+export function variantLabel(variant: Variant): string {
+  return variant === 'holdem' ? "No-Limit Hold'em" : 'PLO 4-card';
+}
+
 export function buildQueuedMode(
   mode: CustomModeName,
   queuedBy: string,

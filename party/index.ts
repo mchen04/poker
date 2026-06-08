@@ -313,7 +313,13 @@ export default class PokerServer implements Party.Server {
     for (const conn of this.conns.values()) {
       const playerId = this.connPlayer.get(conn.id);
       const snap = snapshot(this.poker, playerId);
-      this.send(conn, { type: "snapshot", publicState: snap.publicState, privateState: snap.privateState });
+      // Isolate per-connection failures (e.g. a socket that closed mid-iteration)
+      // so one dead client can't starve the rest of the table of updates.
+      try {
+        this.send(conn, { type: "snapshot", publicState: snap.publicState, privateState: snap.privateState });
+      } catch {
+        /* dropped client; onClose will reap it */
+      }
     }
     if (this.conns.size() > 0) this.botController.notifyStateChanged();
     void this.persist();
@@ -333,9 +339,16 @@ export default class PokerServer implements Party.Server {
     for (const connId of connIds) {
       const conn = this.conns.get(connId);
       this.connPlayer.delete(connId);
+      // Drop it from the manager now so the just-closed socket isn't iterated by
+      // the broadcast that follows this kick (onClose fires asynchronously).
+      this.conns.remove(connId);
       if (conn) {
-        this.send(conn, { type: "kicked", message: "You were removed from this private room by the host." });
-        conn.close();
+        try {
+          this.send(conn, { type: "kicked", message: "You were removed from this private room by the host." });
+          conn.close();
+        } catch {
+          /* socket already gone */
+        }
       }
     }
   }

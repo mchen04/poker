@@ -1,8 +1,8 @@
 import { nanoid } from 'nanoid';
 import { cardLabel, isSevenTwo } from '../shared/cards';
-import { buildQueuedMode, mergeMode, modeLabel, validateMode } from '../shared/modes';
+import { buildQueuedMode, mergeMode, modeLabel, validateMode, variantLabel } from '../shared/modes';
 import { cleanChat, cleanName, clampInt } from '../shared/sanitize';
-import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic, LegalActions, PlayerPublic, PrivateState, QueuedCustomMode, RoomPublicState, RoomSettings, RoomSettingsPatch, ServerSnapshot, SocketResult, Variant } from '../shared/types';
+import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic, LegalActions, PlayerPublic, PrivateState, QueuedCustomMode, RoomPublicState, RoomSettings, RoomSettingsPatch, ServerSnapshot, SocketResult } from '../shared/types';
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload, type HostActionResult } from './hostControls';
 import { handToPublic } from './projection';
@@ -552,9 +552,6 @@ function buildHand(room: RoomInternal): SocketResult {
   return { ok: true };
 }
 
-function variantLabel(variant: Variant): string {
-  return variant === 'holdem' ? "No-Limit Hold'em" : 'PLO 4-card';
-}
 
 export function startGame(room: RoomInternal, player: PlayerInternal): SocketResult {
   const lifecycleError = requireMutableRoom(room);

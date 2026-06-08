@@ -37,4 +37,15 @@ describe('side pots', () => {
       { amount: 250, eligibleSeatNumbers: [3], label: 'Side pot 2' }
     ]);
   });
+
+  it('conserves chips when a top layer has only folded contributors (uncalled overbet)', () => {
+    const pots = buildSidePots([
+      { seat: 0, amount: 50, folded: false },
+      { seat: 1, amount: 50, folded: false },
+      { seat: 2, amount: 100, folded: true }
+    ]);
+    // The folded overbettor's uncalled 50 must not vanish: total pots == total committed (200).
+    expect(pots.reduce((sum, pot) => sum + pot.amount, 0)).toBe(200);
+    expect(pots.every((pot) => pot.eligibleSeatNumbers.length > 0)).toBe(true);
+  });
 });

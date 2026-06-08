@@ -70,12 +70,19 @@ export function buildSidePots(
     const contributors = positive.filter((entry) => entry.amount >= level);
     const eligible = contributors.filter((entry) => !entry.folded).map((entry) => entry.seat);
     const amount = (level - previous) * contributors.length;
-    if (amount > 0 && eligible.length > 0) {
-      pots.push({
-        amount,
-        eligibleSeatNumbers: eligible,
-        label: pots.length === 0 ? 'Main pot' : `Side pot ${pots.length}`
-      });
+    if (amount > 0) {
+      if (eligible.length > 0) {
+        pots.push({
+          amount,
+          eligibleSeatNumbers: eligible,
+          label: pots.length === 0 ? 'Main pot' : `Side pot ${pots.length}`
+        });
+      } else if (pots.length > 0) {
+        // No live contributor for this layer (an uncalled overbet by a player who
+        // then folded). Never drop the chips — fold them into the previous pot so
+        // the total is conserved.
+        pots[pots.length - 1].amount += amount;
+      }
     }
     previous = level;
   });
