@@ -21,6 +21,7 @@ import type {
   Variant
 } from '../shared/types';
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
+import { hostActionWithSupport, type HostActionPayload } from './hostControls';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -460,9 +461,9 @@ function buildHand(room: RoomInternal): SocketResult {
     variant: mode.variant,
     modifiers: mode.modifiers,
     buttonSeat,
-    smallBlindSeat,
-    bigBlindSeat,
-    straddleSeat,
+    smallBlindSeat: mode.modifiers.bombPot ? null : smallBlindSeat,
+    bigBlindSeat: mode.modifiers.bombPot ? null : bigBlindSeat,
+    straddleSeat: mode.modifiers.bombPot ? null : straddleSeat,
     currentTurnSeat: null,
     currentBet: 0,
     minRaise: room.settings.bigBlind,
@@ -487,16 +488,19 @@ function buildHand(room: RoomInternal): SocketResult {
   room.queuedMode = null;
   audit(room, 'hand.started', `Hand ${hand.number} started: ${variantLabel(hand.variant)}${queued ? `, queued ${queued.label}` : ''}`, undefined, {
     buttonSeat,
-    smallBlindSeat,
-    bigBlindSeat,
-    straddleSeat,
+    smallBlindSeat: hand.smallBlindSeat,
+    bigBlindSeat: hand.bigBlindSeat,
+    straddleSeat: hand.straddleSeat,
     shuffleCommitment: commitment
   });
-  postBlind(room, hand, smallBlindSeat, room.settings.smallBlind, 'small blind');
-  postBlind(room, hand, bigBlindSeat, room.settings.bigBlind, 'big blind');
-  if (straddleSeat !== null) postBlind(room, hand, straddleSeat, Math.max(room.settings.straddle.amount, room.settings.bigBlind * 2), 'straddle');
-
-  if (mode.modifiers.bombPot) {
+  if (!mode.modifiers.bombPot) {
+    postBlind(room, hand, smallBlindSeat, room.settings.smallBlind, 'small blind');
+    postBlind(room, hand, bigBlindSeat, room.settings.bigBlind, 'big blind');
+    if (straddleSeat !== null) postBlind(room, hand, straddleSeat, Math.max(room.settings.straddle.amount, room.settings.bigBlind * 2), 'straddle');
+  } else {
+    hand.smallBlindSeat = null;
+    hand.bigBlindSeat = null;
+    hand.straddleSeat = null;
     hand.participants.forEach((participant) => {
       const player = room.players.get(participant.playerId);
       if (!player) return;
@@ -505,6 +509,8 @@ function buildHand(room: RoomInternal): SocketResult {
       participant.committedThisHand += ante;
       if (player.stack === 0) participant.allIn = true;
     });
+    hand.currentBet = 0;
+    hand.minRaise = room.settings.bigBlind;
     dealStreet(hand, 'flop');
     audit(room, 'modifier.applied', `Bomb pot posted ${Math.max(room.settings.bigBlind, room.settings.ante)} from each player and skipped preflop betting.`);
   }
@@ -557,7 +563,7 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
   const potSize = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
   const maxBet = player.stack;
   const minRaiseTo = hand.currentBet + hand.minRaise;
-  const ploMax = hand.variant === 'holdem' ? maxBet : Math.min(maxBet, potSize + toCall * 2 + player.stack);
+  const ploMax = hand.variant === 'holdem' ? maxBet : Math.min(maxBet, potSize + toCall * 2);
   return {
     canFold: toCall > 0,
     canCheck: toCall === 0,
@@ -568,7 +574,7 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
     minBet: Math.min(room.settings.bigBlind, maxBet),
     minRaiseTo,
     maxBet: Math.max(0, ploMax),
-    allInAmount: player.stack,
+    allInAmount: hand.variant === 'holdem' || player.stack <= ploMax ? player.stack : 0,
     potSize
   };
 }
@@ -611,7 +617,9 @@ export function act(
     participant.acted = true;
     audit(room, 'action.call', `${player.name} called ${toCall}`, player.id, { amount: toCall });
   } else if (payload.action === 'bet' || payload.action === 'raise') {
-    const amount = clampInt(payload.amount, 1, legal.maxBet, 0);
+    const rawAmount = clampInt(payload.amount, 1, Number.MAX_SAFE_INTEGER, 0);
+    if (rawAmount > legal.maxBet) return { ok: false, error: 'Bet is larger than the legal maximum.' };
+    const amount = rawAmount;
     const targetBet = participant.currentBet + amount;
     if (payload.action === 'bet' && !legal.canBet) return { ok: false, error: 'Bet is not legal.' };
     if (payload.action === 'raise' && !legal.canRaise) return { ok: false, error: 'Raise is not legal.' };
@@ -636,6 +644,9 @@ export function act(
   } else if (payload.action === 'all_in') {
     const amount = player.stack;
     if (amount <= 0) return { ok: false, error: 'No chips to move all-in.' };
+    if (hand.variant !== 'holdem' && amount > legal.maxBet && amount > legal.callAmount) {
+      return { ok: false, error: 'Pot-limit maximum is lower than all-in.' };
+    }
     const previousBet = hand.currentBet;
     moveChips(player, participant, amount);
     if (participant.currentBet > hand.currentBet) {
@@ -877,6 +888,8 @@ export function approveChips(room: RoomInternal, host: PlayerInternal, targetId:
   return approveChipsWithSupport(chipSupport, room, host, targetId, amountInput, reasonInput);
 }
 
+const hostSupport = { activeHand: hasActiveHand, audit, requireHost };
+
 export function queueMode(room: RoomInternal, player: PlayerInternal, mode: CustomModeName): SocketResult {
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
@@ -892,61 +905,8 @@ export function queueMode(room: RoomInternal, player: PlayerInternal, mode: Cust
   return { ok: true };
 }
 
-export function hostAction(
-  room: RoomInternal,
-  host: PlayerInternal,
-  payload: { action: 'kick' | 'ban' | 'mute' | 'forceSitOut' | 'transferHost' | 'lock' | 'spectators'; playerId?: string; value?: boolean }
-): SocketResult {
-  const hostError = requireHost(room, host);
-  if (hostError) return hostError;
-  if (payload.action === 'lock') {
-    room.settings.locked = Boolean(payload.value);
-    audit(room, 'host.lock', `${host.name} ${room.settings.locked ? 'locked' : 'unlocked'} the room`, host.id);
-    return { ok: true };
-  }
-  if (payload.action === 'spectators') {
-    room.settings.spectatorsAllowed = Boolean(payload.value);
-    audit(room, 'host.spectators', `${host.name} turned spectators ${room.settings.spectatorsAllowed ? 'on' : 'off'}`, host.id);
-    return { ok: true };
-  }
-  const target = payload.playerId ? room.players.get(payload.playerId) : null;
-  if (!target) return { ok: false, error: 'Player not found.' };
-  if ((payload.action === 'kick' || payload.action === 'ban' || payload.action === 'forceSitOut' || payload.action === 'transferHost') && hasActiveHand(room)) {
-    audit(room, 'host.action_rejected', `Rejected ${payload.action} during active hand`, host.id, { targetId: target.id });
-    return { ok: false, error: 'Finish the active hand before changing seats, sit-out state, or host ownership.' };
-  }
-  if (payload.action === 'transferHost') {
-    host.isHost = false;
-    target.isHost = true;
-    room.hostId = target.id;
-    audit(room, 'host.transferred', `${host.name} transferred host to ${target.name}`, host.id, { targetId: target.id });
-    return { ok: true };
-  }
-  if (payload.action === 'mute') {
-    target.muted = Boolean(payload.value);
-    audit(room, 'host.mute', `${target.name} was ${target.muted ? 'muted' : 'unmuted'}`, host.id, { targetId: target.id });
-    return { ok: true };
-  }
-  if (payload.action === 'forceSitOut') {
-    target.status = 'sitting_out';
-    audit(room, 'host.force_sit_out', `${target.name} was forced to sit out`, host.id, { targetId: target.id });
-    return { ok: true };
-  }
-  if (payload.action === 'kick' || payload.action === 'ban') {
-    if (target.seat !== null) room.seats[target.seat] = null;
-    target.seat = null;
-    target.status = 'sitting_out';
-    if (payload.action === 'ban') {
-      target.banned = true;
-      room.bannedTokens.add(target.sessionToken);
-      target.socketIds.clear();
-    }
-    audit(room, payload.action === 'ban' ? 'host.ban' : 'host.kick', `${target.name} was ${payload.action === 'ban' ? 'banned' : 'kicked'}`, host.id, {
-      targetId: target.id
-    });
-    return { ok: true };
-  }
-  return { ok: false, error: 'Unknown host action.' };
+export function hostAction(room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): SocketResult {
+  return hostActionWithSupport(hostSupport, room, host, payload);
 }
 
 export function addChat(room: RoomInternal, player: PlayerInternal, input: string): SocketResult {

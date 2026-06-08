@@ -53,6 +53,33 @@ describe('room command model', () => {
     expect(room.audit.some((entry) => entry.type.startsWith('chips.'))).toBe(true);
   });
 
+  it('starts bomb pots without blind residue or preflop calls', () => {
+    const { room, host } = setupThreePlayers();
+    expect(queueMode(room, host, 'bomb_pot').ok).toBe(true);
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    expect(hand.phase).toBe('flop');
+    expect(hand.smallBlindSeat).toBeNull();
+    expect(hand.bigBlindSeat).toBeNull();
+    expect(hand.straddleSeat).toBeNull();
+    expect(hand.currentBet).toBe(0);
+    expect([...hand.participants.values()].every((participant) => participant.currentBet === 0)).toBe(true);
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    expect(snapshot(room, actor.id).privateState?.legalActions.canCheck).toBe(true);
+  });
+
+  it('rejects PLO raises above the pot-limit maximum', () => {
+    const { room, host } = setupThreePlayers();
+    expect(queueMode(room, host, 'omaha4').ok).toBe(true);
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    const legal = snapshot(room, actor.id).privateState!.legalActions;
+    expect(legal.maxBet).toBeLessThan(actor.stack);
+    const result = act(room, actor, { action: 'raise', amount: actor.stack, nonce: hand.actionNonce });
+    expect(result.ok).toBe(false);
+  });
+
   it('starts preflop action left of the straddle without skipping the first caller', () => {
     const { room, host } = setupThreePlayers();
     const started = startGame(room, host);
@@ -124,5 +151,18 @@ describe('room command model', () => {
     const ended = endSession(room, host);
     expect(ended.ok).toBe(true);
     if (ended.ok) expect(ended.exportText).toContain(`${players[1].name}: buy-ins 1000, stack 1000, cash-out 1000, up/down 0`);
+  });
+
+  it('invalidates kicked players and protects host ownership', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(hostAction(room, host, { action: 'kick', playerId: players[1].id }).ok).toBe(true);
+    expect(sit(room, players[1], 4).ok).toBe(false);
+    expect(hostAction(room, host, { action: 'ban', playerId: host.id }).ok).toBe(false);
+    const spectatorJoin = joinRoom(room.code, 'Watcher', undefined, true);
+    expect(spectatorJoin.ok).toBe(true);
+    if (spectatorJoin.ok) {
+      const spectator = playerInRoom(room, spectatorJoin.playerId)!;
+      expect(hostAction(room, host, { action: 'transferHost', playerId: spectator.id }).ok).toBe(false);
+    }
   });
 });
