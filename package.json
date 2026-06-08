@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "stress": "tsx scripts/poker-stress.ts"
+    "stress": "tsx scripts/poker-stress.ts",
+    "smoke": "tsx scripts/server-smoke.ts"
   },
   "dependencies": {
     "nanoid": "^5.0.9",

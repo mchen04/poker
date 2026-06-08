@@ -15,6 +15,7 @@ export function RoomHeader({
   onLeave,
   onEnd,
   onTogglePanel,
+  showPanelToggle,
 }: {
   publicState: RoomPublicState;
   code: string;
@@ -22,6 +23,7 @@ export function RoomHeader({
   onLeave: () => void;
   onEnd: () => void;
   onTogglePanel: () => void;
+  showPanelToggle: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [endArmed, setEndArmed] = useState(false);
@@ -73,17 +75,16 @@ export function RoomHeader({
         <HeaderBtn label={copied ? "Copied!" : "Invite"} onClick={copyInvite} />
         {isHost && <HeaderBtn label={endArmed ? "Confirm end?" : "End & export"} tone={endArmed ? "danger" : undefined} onClick={handleEnd} />}
         <HeaderBtn label="Leave" tone="danger" onClick={onLeave} />
-        <HeaderBtn label="☰" onClick={onTogglePanel} mobileOnly />
+        {showPanelToggle && <HeaderBtn label="☰" onClick={onTogglePanel} />}
       </div>
     </header>
   );
 }
 
-function HeaderBtn({ label, onClick, tone, mobileOnly }: { label: string; onClick: () => void; tone?: "danger"; mobileOnly?: boolean }) {
+function HeaderBtn({ label, onClick, tone }: { label: string; onClick: () => void; tone?: "danger" }) {
   return (
     <button
       onClick={onClick}
-      className={mobileOnly ? "panel-toggle" : undefined}
       style={{
         fontSize: 11,
         fontWeight: 800,

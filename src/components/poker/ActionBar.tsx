@@ -8,6 +8,10 @@ import { canStartGame, seatedReadyCount } from "@/lib/utils";
 import { PokerCard } from "./Card";
 import { BettingControl } from "./BettingControl";
 
+const CLOCK_TICK_MS = 300;
+const CLOCK_URGENT_FRACTION = 0.25;
+const CLOCK_WIDTH_PX = 70;
+
 export function ActionBar({
   publicState,
   privateState,
@@ -96,15 +100,15 @@ function ActionClock({ hand, seconds, active }: { hand: { turnStartedAt: number 
   const [, tick] = useState(0);
   useEffect(() => {
     if (!active || seconds <= 0 || hand.turnStartedAt === null) return;
-    const id = setInterval(() => tick((n) => n + 1), 300);
+    const id = setInterval(() => tick((n) => n + 1), CLOCK_TICK_MS);
     return () => clearInterval(id);
   }, [active, seconds, hand.turnStartedAt]);
   if (!active || seconds <= 0 || hand.turnStartedAt === null) return null;
   const remaining = Math.max(0, seconds - (Date.now() - hand.turnStartedAt) / 1000);
   const pct = Math.max(0, Math.min(100, (remaining / seconds) * 100));
-  const urgent = remaining < seconds * 0.25;
+  const urgent = remaining < seconds * CLOCK_URGENT_FRACTION;
   return (
-    <div style={{ width: 70 }}>
+    <div style={{ width: CLOCK_WIDTH_PX }}>
       <div style={{ fontSize: 10, fontWeight: 800, color: urgent ? D.danger : D.sub, textAlign: "right" }}>{Math.ceil(remaining)}s</div>
       <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: urgent ? D.danger : D.gold, transition: "width 0.3s linear" }} />

@@ -48,8 +48,6 @@ export default class PokerServer implements Party.Server {
   private botController: BotController;
   /** When set, the next hand auto-deals at this time (continuous play). */
   private autoStartAt: number | null = null;
-  /** When the last human disconnected; drives idle-room cleanup. Null while a human is present. */
-  private humansGoneSince: number | null = null;
 
   constructor(readonly room: Party.Room) {
     this.poker = createEmptyRoom(room.id);
@@ -92,7 +90,8 @@ export default class PokerServer implements Party.Server {
 
   onConnect(conn: Party.Connection): void {
     this.conns.add(conn);
-    this.humansGoneSince = null;
+    // A live connection means the room is no longer abandoned.
+    this.poker.emptySince = null;
   }
 
   onClose(conn: Party.Connection): void {
@@ -110,8 +109,10 @@ export default class PokerServer implements Party.Server {
     if (this.conns.size() === 0) {
       this.botController.dispose();
       this.autoStartAt = null;
-      this.humansGoneSince = Date.now();
+      // Persisted on the room so cleanup survives DO hibernation.
+      this.poker.emptySince = this.poker.emptySince ?? Date.now();
       this.alarmScheduler.invalidate();
+      void this.persist();
       void this.room.storage.setAlarm(Date.now() + EMPTY_ROOM_GRACE_MS).catch(() => undefined);
     }
   }
@@ -141,8 +142,10 @@ export default class PokerServer implements Party.Server {
     this.alarmScheduler.invalidate();
     if (this.conns.size() === 0) {
       // No humans: once the grace window elapses, free storage; otherwise re-arm.
-      // Tolerance absorbs timer jitter so the grace-aligned alarm cleans up.
-      if (this.humansGoneSince !== null && Date.now() - this.humansGoneSince >= EMPTY_ROOM_GRACE_MS - 1000) {
+      // emptySince is persisted, so this survives hibernation. Tolerance absorbs
+      // timer jitter so the grace-aligned alarm cleans up rather than re-arming.
+      const emptySince = this.poker.emptySince;
+      if (emptySince !== null && Date.now() - emptySince >= EMPTY_ROOM_GRACE_MS - 1000) {
         try {
           await this.room.storage.deleteAll();
         } catch {
@@ -157,7 +160,7 @@ export default class PokerServer implements Party.Server {
       }
       return;
     }
-    this.humansGoneSince = null;
+    this.poker.emptySince = null;
     let changed = false;
     const hand = this.poker.hand;
     if (
@@ -344,8 +347,9 @@ export default class PokerServer implements Party.Server {
     const room = this.poker;
     if (room.hostId !== leavingPlayerId) return;
     if (room.lifecycle === "ended") return;
-    // Only hand the host badge to another connected human — never a bot, and
-    // never a disconnected player (the leaving host reclaims it on reconnect).
+    // Hand the host badge to another connected human (never a bot). If there is
+    // no eligible human, the badge stays with the leaving host, who reclaims it
+    // on reconnect (sessionToken match keeps the same player + isHost).
     const candidate = [...room.players.values()].find(
       (p) => p.id !== leavingPlayerId && !p.isBot && p.socketIds.size > 0 && !p.spectator && !p.banned
     );

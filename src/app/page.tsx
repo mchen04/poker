@@ -129,7 +129,7 @@ export default function HomePage() {
                     value={joinCode[i]}
                     onChange={(e) => handleCharInput(i, e.target.value)}
                     onKeyDown={(e) => handleCharKeyDown(i, e)}
-                    maxLength={2}
+                    maxLength={1}
                     className="flex-1 min-w-0 text-center font-serif font-black rounded-xl outline-none transition-all"
                     style={{
                       aspectRatio: "1",
@@ -158,7 +158,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#6a8a72" }}>
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: D.muted }}>
           Hold'em &amp; PLO · blinds, side pots, showdown · play-money only
         </p>
       </div>

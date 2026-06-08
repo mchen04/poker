@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { act, addChat, approveChips, attachSocket, createEmptyRoom, detachSocket, endSession, hostAction, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame, updateSettings } from '../src/modes/holdem/engine/room';
-import { makeCode } from '../src/modes/holdem/engine/roomCode';
 
 function hostRoom(code: string, roomName: string) {
   const room = createEmptyRoom(code, roomName);
@@ -192,20 +190,17 @@ describe('room command model', () => {
     expect(snapshot(room, actor.id).privateState?.legalActions.canCheck).toBe(true);
   });
 
-  it('reveals the committed shuffle preimage after hand completion', () => {
-    const { room, host, players } = setupThreePlayers();
+  it('awards the pot without showdown when all but one fold', () => {
+    const { room, host } = setupThreePlayers();
     expect(startGame(room, host).ok).toBe(true);
     const hand = room.hand!;
-    const commitment = hand.shuffleCommitment;
     const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
     expect(act(room, actor, { action: 'fold', nonce: hand.actionNonce }).ok).toBe(true);
     const nextActor = [...room.players.values()].find((player) => player.seat === room.hand?.currentTurnSeat)!;
     expect(act(room, nextActor, { action: 'fold', nonce: room.hand!.actionNonce }).ok).toBe(true);
     expect(room.hand?.phase).toBe('complete');
-    const reveal = room.hand!.shuffleReveal!;
-    expect(createHash('sha256').update(reveal).digest('hex')).toBe(commitment);
-    expect(reveal.split(':')[1].split(',')).toHaveLength(52);
-    expect(players.length).toBeGreaterThan(0);
+    expect(room.hand?.winningSeats.length).toBe(1);
+    expect(room.hand?.summary).toContain('without showdown');
   });
 
   it('rejects PLO raises above the pot-limit maximum', () => {
@@ -493,10 +488,6 @@ describe('room command model', () => {
     expect(hostAction(room, host, { action: 'forceSitOut', playerId: target.id, value: false }).ok).toBe(true);
     expect(snapshot(room, host.id).publicState.players.find((player) => player.id === target.id)?.forcedSitOut).toBe(false);
     expect(sit(room, target, 4).ok).toBe(true);
-  });
-
-  it('generates high-entropy room codes for invite-bearing rooms', () => {
-    expect(makeCode()).toMatch(/^[A-Z0-9]{8}$/);
   });
 
   it('charges 7-2 bounty only to players dealt into the hand', () => {

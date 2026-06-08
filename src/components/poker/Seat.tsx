@@ -122,7 +122,7 @@ export function Seat({
 
         {/* Role badges */}
         <div style={{ display: "flex", justifyContent: "center", gap: 3, marginTop: 3, minHeight: 12 }}>
-          {hand?.buttonSeat === seat && <RoleBadge label="D" bg="#f5e6b8" />}
+          {hand?.buttonSeat === seat && <RoleBadge label="D" bg={D.goldBright} />}
           {hand?.smallBlindSeat === seat && <RoleBadge label="SB" bg="#9fc5e8" />}
           {hand?.bigBlindSeat === seat && <RoleBadge label="BB" bg="#e8b89f" />}
           {hand?.straddleSeat === seat && <RoleBadge label="STR" bg="#c9a5e8" />}

@@ -50,12 +50,6 @@ export interface ParticipantInternal {
 
 export interface HandInternal extends HandPublic {
   deck: Card[];
-  initialDeck: Card[];
-  shuffleSeed: string;
-  /** sha256 commitment to the shuffled deck; kept server-side for fairness/audit, never broadcast. */
-  shuffleCommitment: string;
-  /** Deck preimage, set at hand end. Server-side only — broadcasting it would leak mucked hands. */
-  shuffleReveal?: string;
   fullRaiseBase: number;
   participants: Map<number, ParticipantInternal>;
 }
@@ -463,8 +457,7 @@ function buildHand(room: RoomInternal): SocketResult {
       ? buttonSeat
       : nextOccupiedSeat(room, bigBlindSeat, players)
     : null;
-  const { deck, seed, commitment } = shuffleDeck();
-  const initialDeck = [...deck];
+  const deck = shuffleDeck();
   const participants = new Map<number, ParticipantInternal>();
   const holeCount = mode.variant === 'holdem' ? 2 : 4;
 
@@ -504,14 +497,11 @@ function buildHand(room: RoomInternal): SocketResult {
     eligibleSeatNumbers: [...participants.keys()],
     lastAggressorSeat: null,
     actionNonce: 1,
-    shuffleCommitment: commitment,
     winners: [],
     summary: '',
     winningSeats: [],
     revealedHands: [],
     deck,
-    initialDeck,
-    shuffleSeed: seed,
     participants
   };
 
@@ -524,8 +514,7 @@ function buildHand(room: RoomInternal): SocketResult {
     buttonSeat,
     smallBlindSeat: hand.smallBlindSeat,
     bigBlindSeat: hand.bigBlindSeat,
-    straddleSeat: hand.straddleSeat,
-    shuffleCommitment: commitment
+    straddleSeat: hand.straddleSeat
   });
   if (!mode.modifiers.bombPot) {
     if (room.settings.ante > 0) {
@@ -853,7 +842,6 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   hand.winningSeats = [winner.seat];
   hand.winners = awards;
   hand.summary = awards.join(' · ');
-  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   reconcileHandParticipants(room, hand);
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`);
@@ -904,7 +892,6 @@ function showdown(room: RoomInternal): void {
   hand.winningSeats = [...winningSeats];
   hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
-  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   reconcileHandParticipants(room, hand);
   audit(room, 'showdown', hand.summary, undefined, { board: hand.board });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`);
@@ -1033,7 +1020,9 @@ export function endSession(room: RoomInternal, host: PlayerInternal): SocketResu
   room.lifecycle = 'ended';
   finalizeStacks(room);
   audit(room, 'session.ended', `${host.name} ended the session and generated export`, host.id);
-  const exportJson = JSON.stringify(publicState(room), null, 2);
+  // The JSON export carries the FULL audit + chat (publicState slices them for
+  // the wire), so the saved file can reconstruct the entire session.
+  const exportJson = JSON.stringify({ ...publicState(room), audit: room.audit, chat: room.chat }, null, 2);
   const { exportText } = buildSessionExport(room, exportJson);
   room.endedExport = { exportText, exportJson };
   return { ok: true, exportText, exportJson };

@@ -45,7 +45,8 @@ const settingsPatchSchema = z
       .object({
         enabled: z.boolean().optional(),
         bounty: z.number().finite().optional(),
-        suitedBonus: z.number().finite().optional()
+        suitedBonus: z.number().finite().optional(),
+        requireShowdown: z.boolean().optional()
       })
       .strict()
       .optional(),

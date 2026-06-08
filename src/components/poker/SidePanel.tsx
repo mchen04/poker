@@ -139,21 +139,21 @@ function ModesTab({ publicState, send }: { publicState: RoomPublicState; send: (
       {!enabled && <div style={{ color: D.muted }}>Custom queue is disabled.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {ALL_CUSTOM_MODES.map((mode) => {
-          const ok = enabled && allowed.includes(mode);
+          const queueable = enabled && allowed.includes(mode) && !queued;
           return (
             <button
               key={mode}
-              disabled={!ok || Boolean(queued)}
+              disabled={!queueable}
               onClick={() => send({ type: "queueMode", mode })}
               style={{
                 padding: "8px",
                 borderRadius: 8,
                 fontWeight: 800,
                 textAlign: "left",
-                background: queued?.id ? "rgba(255,255,255,0.05)" : ok ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+                background: queueable ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
                 border: `1px solid ${D.panelBorder}`,
-                color: ok && !queued ? D.goldBright : D.muted,
-                cursor: ok && !queued ? "pointer" : "not-allowed",
+                color: queueable ? D.goldBright : D.muted,
+                cursor: queueable ? "pointer" : "not-allowed",
               }}
             >
               {modeLabel(mode)}

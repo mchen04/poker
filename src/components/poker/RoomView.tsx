@@ -48,6 +48,7 @@ export function RoomView() {
         onLeave={leave}
         onEnd={() => send({ type: "endSession" })}
         onTogglePanel={() => setPanelOpen((o) => !o)}
+        showPanelToggle={!wide}
       />
 
       {publicState.queuedMode && (
@@ -88,7 +89,7 @@ export function RoomView() {
         <div
           style={{
             position: "fixed",
-            bottom: 20,
+            top: 64,
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 60,
