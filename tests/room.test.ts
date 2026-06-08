@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { act, approveChips, createRoom, detachSocket, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
+import { act, addChat, approveChips, createRoom, detachSocket, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
 function setupThreePlayers() {
   const created = createRoom('Host', 'Test Room');
@@ -250,6 +250,30 @@ describe('room command model', () => {
     if (ended.ok) expect(ended.exportText).toContain('Host: buy-ins 1000, stack 1000, cash-out 1000, up/down 0');
   });
 
+  it('makes ended sessions read-only and keeps the export idempotent', () => {
+    const { room, host, players } = setupThreePlayers();
+    const ended = endSession(room, host);
+    expect(ended.ok).toBe(true);
+    if (!ended.ok) throw new Error('end session failed');
+    const exportJson = ended.exportJson;
+    const stack = players[1].stack;
+    const auditCount = room.audit.length;
+    expect(joinRoom(room.code, 'Late')).toEqual({ ok: false, error: 'Session already ended.' });
+    expect(updateSettings(room, host, { bigBlind: 40 }).ok).toBe(false);
+    expect(sit(room, players[1], 4).ok).toBe(false);
+    expect(setReady(room, players[1], false).ok).toBe(false);
+    expect(requestChips(room, players[1], 200, 'late rebuy').ok).toBe(false);
+    expect(approveChips(room, host, players[1].id, 200, 'late edit').ok).toBe(false);
+    expect(queueMode(room, players[1], 'omaha4').ok).toBe(false);
+    expect(hostAction(room, host, { action: 'lock', value: true }).ok).toBe(false);
+    expect(addChat(room, players[1], 'after end').ok).toBe(false);
+    expect(players[1].stack).toBe(stack);
+    expect(room.audit).toHaveLength(auditCount);
+    const again = endSession(room, host);
+    expect(again.ok).toBe(true);
+    if (again.ok) expect(again.exportJson).toBe(exportJson);
+  });
+
   it('requires a valid session token to join a locked room', () => {
     const { room, host } = setupThreePlayers();
     const locked = hostAction(room, host, { action: 'lock', value: true });
@@ -295,6 +319,35 @@ describe('room command model', () => {
     players[2].socketIds.clear();
     players[2].status = 'disconnected';
     expect(hostAction(room, host, { action: 'transferHost', playerId: players[2].id }).ok).toBe(false);
+  });
+
+  it('rejects custom queues from spectators and forced sit-out players', () => {
+    const { room, host, players } = setupThreePlayers();
+    const spectatorJoin = joinRoom(room.code, 'Rail', undefined, true);
+    expect(spectatorJoin.ok).toBe(true);
+    if (!spectatorJoin.ok) throw new Error('spectator join failed');
+    const spectator = playerInRoom(room, spectatorJoin.playerId)!;
+    spectator.socketIds.add('rail-socket');
+    expect(queueMode(room, spectator, 'omaha4').ok).toBe(false);
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: players[1].id }).ok).toBe(true);
+    expect(queueMode(room, players[1], 'omaha4').ok).toBe(false);
+    expect(room.queuedMode).toBeNull();
+  });
+
+  it('preserves forced sit-out across sit attempts and reconnects until host restores it', () => {
+    const { room, host, players } = setupThreePlayers();
+    const target = players[1];
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: target.id }).ok).toBe(true);
+    expect(sit(room, target, 4).ok).toBe(false);
+    const socket = [...target.socketIds][0];
+    detachSocket(socket);
+    expect(target.status).toBe('sitting_out');
+    const rejoin = joinRoom(room.code, target.name, target.sessionToken);
+    expect(rejoin.ok).toBe(true);
+    expect(target.status).toBe('sitting_out');
+    expect(sit(room, target, 4).ok).toBe(false);
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: target.id, value: false }).ok).toBe(true);
+    expect(sit(room, target, 4).ok).toBe(true);
   });
 
   it('generates high-entropy room codes for invite-bearing rooms', () => {

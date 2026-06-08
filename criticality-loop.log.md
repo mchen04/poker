@@ -16,3 +16,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 7 | BLOCK | 0/4/0 | 1 | +112 | pass | fixed short all-in no-reopen, disconnect timeout fold/check, kicked join capacity, and explicit public hand projection |
 | 8 | BLOCK | 0/2/0 | 1 | +22 | pass | fixed non-current disconnect turn preservation and create-room throttling/room cap cleanup |
 | 9 | BLOCK | 0/2/0 | 1 | +21 | pass | fixed disconnected turn rotation timeout and emptySince-based idle room cleanup |
+| 10 | BLOCK | 1/2/0 | 1 | +108 | pass | made ended sessions read-only/idempotent, restricted player-driven custom queues, and preserved forced sit-out across reconnect |

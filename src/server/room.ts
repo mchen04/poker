@@ -6,6 +6,7 @@ import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload } from './hostControls';
 import { handToPublic } from './projection';
+import { hasActiveHand, rateLimited, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant } from './access';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -21,6 +22,7 @@ export interface PlayerInternal {
   isHost: boolean;
   muted: boolean;
   banned: boolean;
+  forcedSitOut: boolean;
   spectator: boolean;
   seat: number | null;
   stack: number;
@@ -191,6 +193,7 @@ export function createRoom(nameInput: string, roomNameInput?: string): SocketRes
     isHost: true,
     muted: false,
     banned: false,
+    forcedSitOut: false,
     spectator: false,
     seat: null,
     stack: defaultSettings().startingStack,
@@ -236,6 +239,7 @@ export function joinRoom(
   const code = codeInput.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const room = rooms.get(code);
   if (!room) return { ok: false, error: 'Room not found.' };
+  if (room.lifecycle === 'ended') return { ok: false, error: 'Session already ended.' };
   if (sessionToken && room.bannedTokens.has(sessionToken)) return { ok: false, error: 'This browser is banned from the room.' };
   if (spectator && !room.settings.spectatorsAllowed) return { ok: false, error: 'Spectators are off.' };
 
@@ -243,7 +247,7 @@ export function joinRoom(
   if (room.settings.locked && !existing) return { ok: false, error: 'Room is locked.' };
   if (existing) {
     if (existing.banned) return { ok: false, error: 'This player is banned from the room.' };
-    existing.status = existing.seat === null ? 'seated' : existing.status === 'disconnected' ? 'seated' : existing.status;
+    existing.status = existing.forcedSitOut || existing.spectator ? 'sitting_out' : existing.seat === null ? 'seated' : existing.status === 'disconnected' ? 'seated' : existing.status;
     room.emptySince = null;
     audit(room, 'player.reconnected', `${existing.name} reconnected`, existing.id);
     return { ok: true, code, playerId: existing.id, sessionToken: existing.sessionToken };
@@ -261,6 +265,7 @@ export function joinRoom(
     isHost: false,
     muted: false,
     banned: false,
+    forcedSitOut: false,
     spectator,
     seat: null,
     stack: spectator ? 0 : room.settings.startingStack,
@@ -291,7 +296,7 @@ export function detachSocket(socketId: string): RoomInternal[] {
     room.players.forEach((player) => {
       if (player.socketIds.delete(socketId)) {
         if (player.socketIds.size === 0) {
-          player.status = player.seat === null ? player.status : 'disconnected';
+          player.status = player.forcedSitOut ? 'sitting_out' : player.seat === null ? player.status : 'disconnected';
           audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
           timeoutDisconnectedParticipant(room, player);
         }
@@ -356,21 +361,9 @@ export function playerInRoom(room: RoomInternal, playerId: string): PlayerIntern
   return room.players.get(playerId);
 }
 
-function requireHost(room: RoomInternal, player: PlayerInternal): { ok: false; error: string } | null {
-  const accessError = requireActivePlayer(player);
-  if (accessError) return accessError;
-  if (room.hostId !== player.id || !player.isHost) return { ok: false, error: 'Only the host can do that.' };
-  return null;
-}
-function requireActivePlayer(player: PlayerInternal): { ok: false; error: string } | null {
-  if (player.banned) return { ok: false, error: 'This player is banned from the room.' };
-  return null;
-}
-function hasActiveHand(room: RoomInternal): boolean {
-  return Boolean(room.hand && room.hand.phase !== 'complete');
-}
-
 export function updateSettings(room: RoomInternal, player: PlayerInternal, patch: RoomSettingsPatch): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const hostError = requireHost(room, player);
   if (hostError) return hostError;
   if (room.lifecycle === 'playing' && room.hand && room.hand.phase !== 'complete') {
@@ -393,9 +386,12 @@ export function updateSettings(room: RoomInternal, player: PlayerInternal, patch
 }
 
 export function sit(room: RoomInternal, player: PlayerInternal, seat: number): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
   if (player.spectator) return { ok: false, error: 'Spectators cannot sit.' };
+  if (player.forcedSitOut) return { ok: false, error: 'Host has forced this player to sit out.' };
   if (hasActiveHand(room)) return { ok: false, error: 'Seat changes are locked during an active hand.' };
   if (seat < 0 || seat >= room.seats.length) return { ok: false, error: 'Seat does not exist.' };
   if (room.seats[seat] && room.seats[seat] !== player.id) return { ok: false, error: 'Seat is occupied.' };
@@ -408,6 +404,8 @@ export function sit(room: RoomInternal, player: PlayerInternal, seat: number): S
 }
 
 export function setReady(room: RoomInternal, player: PlayerInternal, ready: boolean): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
   player.ready = ready;
@@ -561,9 +559,10 @@ function variantLabel(variant: Variant): string {
 }
 
 export function startGame(room: RoomInternal, player: PlayerInternal): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const hostError = requireHost(room, player);
   if (hostError) return hostError;
-  if (room.lifecycle === 'ended') return { ok: false, error: 'Session already ended.' };
   if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish the active hand before starting another.' };
   return buildHand(room);
 }
@@ -619,6 +618,8 @@ export function act(
   player: PlayerInternal,
   payload: { action: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in'; amount?: number; nonce: number }
 ): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
   const hand = room.hand;
@@ -922,22 +923,32 @@ function applySevenTwoBounty(room: RoomInternal, live: ParticipantInternal[], aw
 const chipSupport = { activeHand: hasActiveHand, audit, requireHost, requirePlayer: requireActivePlayer };
 
 export function requestChips(room: RoomInternal, player: PlayerInternal, amountInput: number, reasonInput = ''): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   return requestChipsWithSupport(chipSupport, room, player, amountInput, reasonInput);
 }
 
 export function approveChips(room: RoomInternal, host: PlayerInternal, targetId: string, amountInput: number, reasonInput = ''): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   return approveChipsWithSupport(chipSupport, room, host, targetId, amountInput, reasonInput);
 }
 
 const hostSupport = { activeHand: hasActiveHand, audit, requireHost };
 
 export function queueMode(room: RoomInternal, player: PlayerInternal, mode: CustomModeName): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
   const error = validateMode(room.settings, mode);
   if (error) return { ok: false, error };
   if (room.queuedMode) return { ok: false, error: `${room.queuedMode.label} is already queued.` };
   if (room.settings.custom.permission === 'creator_only' && !player.isHost) return { ok: false, error: 'Only host can queue modes.' };
+  if (room.settings.custom.permission !== 'creator_only') {
+    const queueError = requireQueueParticipant(player);
+    if (queueError) return queueError;
+  }
   if (room.settings.custom.permission === 'button' && room.hand?.buttonSeat !== player.seat) return { ok: false, error: 'Only the button can queue this hand.' };
   if (room.nextHandNumber - player.lastCustomHand < room.settings.custom.cooldownHands) return { ok: false, error: 'Custom mode cooldown is still active.' };
   room.queuedMode = buildQueuedMode(mode, player.id, player.name, room.nextHandNumber);
@@ -947,10 +958,14 @@ export function queueMode(room: RoomInternal, player: PlayerInternal, mode: Cust
 }
 
 export function hostAction(room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   return hostActionWithSupport(hostSupport, room, host, payload);
 }
 
 export function addChat(room: RoomInternal, player: PlayerInternal, input: string): SocketResult {
+  const lifecycleError = requireMutableRoom(room);
+  if (lifecycleError) return lifecycleError;
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
   if (player.muted) return { ok: false, error: 'You are muted.' };
@@ -967,16 +982,10 @@ export function addChat(room: RoomInternal, player: PlayerInternal, input: strin
   return { ok: true };
 }
 
-function rateLimited(timestamps: number[], limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  timestamps.push(now);
-  while (timestamps.length && timestamps[0] < now - windowMs) timestamps.shift();
-  return timestamps.length > limit;
-}
-
 export function endSession(room: RoomInternal, host: PlayerInternal): SocketResult<{ exportText: string; exportJson: string }> {
   const hostError = requireHost(room, host);
   if (hostError) return hostError;
+  if (room.endedExport) return { ok: true, ...room.endedExport };
   if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish or pause the hand before ending the session.' };
   room.lifecycle = 'ended';
   finalizeStacks(room);

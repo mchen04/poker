@@ -50,8 +50,14 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     return { ok: true };
   }
   if (payload.action === 'forceSitOut') {
-    target.status = 'sitting_out';
-    support.audit(room, 'host.force_sit_out', `${target.name} was forced to sit out`, host.id, { targetId: target.id });
+    target.forcedSitOut = payload.value !== false;
+    if (target.forcedSitOut) {
+      target.status = 'sitting_out';
+      target.ready = false;
+    } else {
+      target.status = target.seat !== null && target.stack > 0 ? 'seated' : target.stack > 0 ? 'sitting_out' : 'busted';
+    }
+    support.audit(room, target.forcedSitOut ? 'host.force_sit_out' : 'host.restore_sit_in', `${target.name} was ${target.forcedSitOut ? 'forced to sit out' : 'allowed to sit in'}`, host.id, { targetId: target.id });
     return { ok: true };
   }
   if (payload.action === 'kick' || payload.action === 'ban') {
