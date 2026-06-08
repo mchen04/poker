@@ -22,6 +22,7 @@ import type {
 } from '../shared/types';
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload } from './hostControls';
+import { handToPublic } from './projection';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -130,12 +131,6 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
   };
 }
 
-function publicHand(hand: HandInternal | null): HandPublic | null {
-  if (!hand) return null;
-  const { deck: _deck, initialDeck: _initialDeck, shuffleSeed: _seed, participants: _participants, ...visible } = hand;
-  return { ...visible };
-}
-
 export function publicState(room: RoomInternal): RoomPublicState {
   return {
     code: room.code,
@@ -147,7 +142,7 @@ export function publicState(room: RoomInternal): RoomPublicState {
     seats: room.seats,
     audit: room.audit.slice(-250),
     chat: room.chat.slice(-120),
-    hand: publicHand(room.hand),
+    hand: handToPublic(room.hand),
     queuedMode: room.queuedMode,
     exportWarning: 'Play-money room state is in memory only. Export before ending the session or closing the server.'
   };
@@ -268,7 +263,7 @@ export function joinRoom(
 
   const name = cleanName(nameInput);
   if (!name) return { ok: false, error: 'Enter a display name.' };
-  if (room.players.size >= 16) return { ok: false, error: 'Room is full.' };
+  if ([...room.players.values()].filter((player) => !player.banned).length >= 16) return { ok: false, error: 'Room is full.' };
 
   const player: PlayerInternal = {
     id: nanoid(10),
@@ -307,6 +302,7 @@ export function detachSocket(socketId: string): RoomInternal[] {
         if (player.socketIds.size === 0) {
           player.status = player.seat === null ? player.status : 'disconnected';
           audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
+          timeoutDisconnectedParticipant(room, player);
         }
         changed.push(room);
       }
@@ -316,6 +312,27 @@ export function detachSocket(socketId: string): RoomInternal[] {
     }
   });
   return changed;
+}
+
+function timeoutDisconnectedParticipant(room: RoomInternal, player: PlayerInternal): void {
+  const hand = room.hand;
+  if (!hand || hand.phase === 'complete' || player.seat === null) return;
+  const participant = hand.participants.get(player.seat);
+  if (!participant || participant.folded || participant.allIn) return;
+
+  if (hand.currentTurnSeat === player.seat && legalActionsFor(room, player).canCheck) {
+    participant.acted = true;
+    audit(room, 'timeout.check', `${player.name} disconnected and timed out to check`, player.id);
+  } else {
+    participant.folded = true;
+    participant.acted = true;
+    participant.timedOut = true;
+    audit(room, 'timeout.fold', `${player.name} disconnected and timed out to fold`, player.id);
+  }
+
+  if (hand.currentTurnSeat === player.seat) hand.actionNonce += 1;
+  updatePots(hand);
+  maybeAutoAdvanceOrAward(room);
 }
 
 export function getRoom(code: string): RoomInternal | undefined {
@@ -575,7 +592,7 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
     canCall: toCall > 0 && player.stack > 0,
     callAmount: Math.min(toCall, player.stack),
     canBet: toCall === 0 && player.stack > 0,
-    canRaise: toCall > 0 && player.stack > toCall && player.stack + participant.currentBet >= minRaiseTo,
+    canRaise: !participant.acted && toCall > 0 && player.stack > toCall && player.stack + participant.currentBet >= minRaiseTo,
     minBet: Math.min(room.settings.bigBlind, maxBet),
     minRaiseTo,
     maxBet: Math.max(0, ploMax),

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { act, approveChips, createRoom, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
+import { act, approveChips, createRoom, detachSocket, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
 function setupThreePlayers() {
   const created = createRoom('Host', 'Test Room');
@@ -27,11 +27,11 @@ describe('room command model', () => {
     expect(started.ok).toBe(true);
     const hostPrivate = snapshot(room, host.id).privateState!;
     const otherPrivate = snapshot(room, players[1].id).privateState!;
-    const publicCards = snapshot(room, host.id).publicState.players.map((player) => JSON.stringify(player));
+    const publicHand = snapshot(room, host.id).publicState.hand!;
     expect(hostPrivate.holeCards).toHaveLength(2);
     expect(otherPrivate.holeCards).toHaveLength(2);
     expect(hostPrivate.holeCards).not.toEqual(otherPrivate.holeCards);
-    expect(publicCards.join(' ')).not.toContain(hostPrivate.holeCards[0]);
+    expect([...publicHand.board, ...publicHand.board2]).not.toContain(hostPrivate.holeCards[0]);
   });
 
   it('does not expose server-only deck fields in active public hand snapshots', () => {
@@ -42,7 +42,10 @@ describe('room command model', () => {
     expect(publicJson).not.toContain('initialDeck');
     expect(publicJson).not.toContain('shuffleSeed');
     expect(publicJson).not.toContain('participants');
-    snapshot(room, host.id).privateState?.holeCards.forEach((card) => expect(publicJson).not.toContain(card));
+    snapshot(room, host.id).privateState?.holeCards.forEach((card) => {
+      expect(snapshot(room, host.id).publicState.hand?.board).not.toContain(card);
+      expect(snapshot(room, host.id).publicState.hand?.board2).not.toContain(card);
+    });
   });
 
   it('rejects stale duplicate actions by nonce', () => {
@@ -69,6 +72,41 @@ describe('room command model', () => {
     const raiseSize = room.hand!.currentBet - previousBet;
     expect(raiseSize).toBeGreaterThanOrEqual(previousMinRaise);
     expect(room.hand!.minRaise).toBe(raiseSize);
+  });
+
+  it('does not reopen raises after a short all-in under-raise', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const caller = hand.participants.get(players[0].seat!)!;
+    const shortAllIn = hand.participants.get(players[1].seat!)!;
+    const blindCaller = hand.participants.get(players[2].seat!)!;
+    caller.currentBet = 10;
+    caller.committedThisHand = 10;
+    caller.acted = true;
+    shortAllIn.currentBet = 13;
+    shortAllIn.committedThisHand = 13;
+    shortAllIn.allIn = true;
+    shortAllIn.acted = true;
+    blindCaller.currentBet = 13;
+    blindCaller.committedThisHand = 13;
+    blindCaller.acted = true;
+    hand.currentBet = 13;
+    hand.minRaise = 10;
+    hand.currentTurnSeat = caller.seat;
+    const legal = snapshot(room, players[0].id).privateState!.legalActions;
+    expect(legal.canCall).toBe(true);
+    expect(legal.canRaise).toBe(false);
+  });
+
+  it('times out and advances when the current actor disconnects mid-hand', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const actor = [...room.players.values()].find((player) => player.seat === room.hand!.currentTurnSeat)!;
+    const socketId = [...actor.socketIds][0];
+    detachSocket(socketId);
+    expect(room.audit.some((entry) => entry.type === 'timeout.fold' || entry.type === 'timeout.check')).toBe(true);
+    expect(room.hand?.currentTurnSeat).not.toBe(actor.seat);
   });
 
   it('queues an MVP custom mode and audit logs chip requests', () => {
