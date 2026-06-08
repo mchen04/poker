@@ -1,7 +1,7 @@
 import type { CustomModeName, CustomPermission, RoomSettings, RoomSettingsPatch } from '../shared/types';
 import { cleanName, clampInt } from '../shared/sanitize';
 
-const customModes: CustomModeName[] = ['holdem', 'omaha4', 'omaha5', 'bomb_pot', 'double_board', 'show_one', 'seven_two'];
+const customModes: CustomModeName[] = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'];
 const customPermissions: CustomPermission[] = ['creator_only', 'button', 'everyone_once_per_orbit'];
 
 export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
@@ -14,7 +14,6 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
     startingStack: 1000,
     minSeats: 2,
     maxSeats: 9,
-    actionTimerSeconds: 30,
     autoApproveChips: false,
     selfServiceChips: true,
     chipMode: 'strict',
@@ -34,7 +33,6 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
     sevenTwo: {
       enabled: true,
       bounty: 25,
-      showdownOnly: false,
       suitedBonus: 25
     },
     largeBetThresholdPct: 75
@@ -59,7 +57,6 @@ export function sanitizeSettings(current: RoomSettings, patch: RoomSettingsPatch
     startingStack: clampInt(patch.startingStack, 1, 10000000, current.startingStack),
     minSeats: clampInt(patch.minSeats, 2, 10, current.minSeats),
     maxSeats: clampInt(patch.maxSeats, 2, 10, current.maxSeats),
-    actionTimerSeconds: clampInt(patch.actionTimerSeconds, 5, 180, current.actionTimerSeconds),
     chipMode: patch.chipMode === 'casual' || patch.chipMode === 'strict' ? patch.chipMode : current.chipMode,
     straddle: {
       enabled: Boolean(patch.straddle?.enabled ?? current.straddle.enabled),
@@ -75,7 +72,6 @@ export function sanitizeSettings(current: RoomSettings, patch: RoomSettingsPatch
     sevenTwo: {
       enabled: Boolean(patch.sevenTwo?.enabled ?? current.sevenTwo.enabled),
       bounty: clampInt(patch.sevenTwo?.bounty, 0, 1000000, current.sevenTwo.bounty),
-      showdownOnly: Boolean(patch.sevenTwo?.showdownOnly ?? current.sevenTwo.showdownOnly),
       suitedBonus: clampInt(patch.sevenTwo?.suitedBonus, 0, 1000000, current.sevenTwo.suitedBonus)
     },
     largeBetThresholdPct: clampInt(patch.largeBetThresholdPct, 1, 100, current.largeBetThresholdPct)

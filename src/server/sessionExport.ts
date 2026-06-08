@@ -2,7 +2,7 @@ import type { RoomInternal } from './room';
 
 export function finalizeStacks(room: RoomInternal): void {
   room.players.forEach((player) => {
-    if (player.seat !== null) player.cashOut = player.stack;
+    if (!player.spectator) player.cashOut = player.stack;
   });
 }
 

@@ -517,7 +517,6 @@ function SettingsView({ room, isHost, setNotice }: { room: RoomPublicState; isHo
       <NumberField label="Buy-in" value={settings.buyIn} onChange={(value) => setNumber('buyIn', value)} />
       <NumberField label="Starting stack" value={settings.startingStack} onChange={(value) => setNumber('startingStack', value)} />
       <NumberField label="Min seats" value={settings.minSeats} onChange={(value) => setNumber('minSeats', value)} />
-      <NumberField label="Timer seconds" value={settings.actionTimerSeconds} onChange={(value) => setNumber('actionTimerSeconds', value)} />
       <label className="toggle-line"><input type="checkbox" checked={settings.selfServiceChips} onChange={(event) => setSettings({ ...settings, selfServiceChips: event.target.checked })} /> Self-service play-money chips</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.straddle.enabled} onChange={(event) => setSettings({ ...settings, straddle: { ...settings.straddle, enabled: event.target.checked } })} /> UTG straddle</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.custom.enabled} onChange={(event) => setSettings({ ...settings, custom: { ...settings.custom, enabled: event.target.checked } })} /> Custom queue on</label>

@@ -17,7 +17,6 @@ import {
   hostAction,
   joinRoom,
   playerInRoom,
-  rooms,
   queueMode,
   requestChips,
   setReady,
@@ -41,15 +40,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(__dirname, '../../dist');
 app.use(express.json({ limit: '16kb' }));
 app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    rooms: [...rooms.values()].map((room) => ({
-      code: room.code,
-      lifecycle: room.lifecycle,
-      players: room.players.size,
-      createdAt: room.createdAt
-    }))
-  });
+  res.json({ ok: true, service: 'feltline-poker', uptime: process.uptime() });
 });
 app.use(express.static(clientDist));
 app.use((_req, res) => {
@@ -70,7 +61,7 @@ function fail(message: string): { ok: false; error: string } {
   return { ok: false, error: message };
 }
 
-const customModes = ['holdem', 'omaha4', 'omaha5', 'bomb_pot', 'double_board', 'show_one', 'seven_two'] as const;
+const customModes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
 const settingsSchema = z
   .object({
     roomName: z.string().max(64).optional(),
@@ -81,7 +72,6 @@ const settingsSchema = z
     startingStack: z.number().finite().optional(),
     minSeats: z.number().finite().optional(),
     maxSeats: z.number().finite().optional(),
-    actionTimerSeconds: z.number().finite().optional(),
     autoApproveChips: z.boolean().optional(),
     selfServiceChips: z.boolean().optional(),
     chipMode: z.enum(['strict', 'casual']).optional(),
@@ -106,7 +96,6 @@ const settingsSchema = z
       .object({
         enabled: z.boolean().optional(),
         bounty: z.number().finite().optional(),
-        showdownOnly: z.boolean().optional(),
         suitedBonus: z.number().finite().optional()
       })
       .optional(),

@@ -20,6 +20,7 @@ import type {
   SocketResult,
   Variant
 } from '../shared/types';
+import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -251,12 +252,13 @@ export function joinRoom(
   const code = codeInput.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const room = rooms.get(code);
   if (!room) return { ok: false, error: 'Room not found.' };
-  if (room.settings.locked && !sessionToken) return { ok: false, error: 'Room is locked.' };
   if (sessionToken && room.bannedTokens.has(sessionToken)) return { ok: false, error: 'This browser is banned from the room.' };
   if (spectator && !room.settings.spectatorsAllowed) return { ok: false, error: 'Spectators are off.' };
 
   const existing = findByToken(room, sessionToken);
+  if (room.settings.locked && !existing) return { ok: false, error: 'Room is locked.' };
   if (existing) {
+    if (existing.banned) return { ok: false, error: 'This player is banned from the room.' };
     existing.status = existing.seat === null ? 'seated' : existing.status === 'disconnected' ? 'seated' : existing.status;
     audit(room, 'player.reconnected', `${existing.name} reconnected`, existing.id);
     return { ok: true, code, playerId: existing.id, sessionToken: existing.sessionToken };
@@ -291,7 +293,8 @@ export function joinRoom(
 }
 
 export function attachSocket(room: RoomInternal, playerId: string, socketId: string): void {
-  room.players.get(playerId)?.socketIds.add(socketId);
+  const player = room.players.get(playerId);
+  if (player && !player.banned) player.socketIds.add(socketId);
 }
 
 export function detachSocket(socketId: string): RoomInternal[] {
@@ -322,7 +325,13 @@ export function playerInRoom(room: RoomInternal, playerId: string): PlayerIntern
 }
 
 function requireHost(room: RoomInternal, player: PlayerInternal): { ok: false; error: string } | null {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   if (room.hostId !== player.id || !player.isHost) return { ok: false, error: 'Only the host can do that.' };
+  return null;
+}
+function requireActivePlayer(player: PlayerInternal): { ok: false; error: string } | null {
+  if (player.banned) return { ok: false, error: 'This player is banned from the room.' };
   return null;
 }
 function hasActiveHand(room: RoomInternal): boolean {
@@ -338,6 +347,9 @@ export function updateSettings(room: RoomInternal, player: PlayerInternal, patch
   }
 
   const next = sanitizeSettings(room.settings, patch);
+  if (next.minSeats > next.maxSeats) return { ok: false, error: 'Minimum seats cannot exceed maximum seats.' };
+  const occupiedPastLimit = room.seats.slice(next.maxSeats).some(Boolean);
+  if (occupiedPastLimit) return { ok: false, error: 'Remove players from high-numbered seats before reducing max seats.' };
   room.settings = next;
   if (room.seats.length !== next.maxSeats) {
     const existing = room.seats.slice(0, next.maxSeats);
@@ -349,7 +361,10 @@ export function updateSettings(room: RoomInternal, player: PlayerInternal, patch
 }
 
 export function sit(room: RoomInternal, player: PlayerInternal, seat: number): SocketResult {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   if (player.spectator) return { ok: false, error: 'Spectators cannot sit.' };
+  if (hasActiveHand(room)) return { ok: false, error: 'Seat changes are locked during an active hand.' };
   if (seat < 0 || seat >= room.seats.length) return { ok: false, error: 'Seat does not exist.' };
   if (room.seats[seat] && room.seats[seat] !== player.id) return { ok: false, error: 'Seat is occupied.' };
   if (player.seat !== null) room.seats[player.seat] = null;
@@ -361,6 +376,8 @@ export function sit(room: RoomInternal, player: PlayerInternal, seat: number): S
 }
 
 export function setReady(room: RoomInternal, player: PlayerInternal, ready: boolean): SocketResult {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   player.ready = ready;
   audit(room, ready ? 'player.ready' : 'player.unready', `${player.name} is ${ready ? 'ready' : 'not ready'}`, player.id);
   return { ok: true };
@@ -418,7 +435,7 @@ function buildHand(room: RoomInternal): SocketResult {
   const mode = mergeMode('holdem', queued);
   const { deck, seed, commitment } = shuffleDeck();
   const participants = new Map<number, ParticipantInternal>();
-  const holeCount = mode.variant === 'holdem' ? 2 : mode.variant === 'omaha5' ? 5 : 4;
+  const holeCount = mode.variant === 'holdem' ? 2 : 4;
 
   players.forEach((player) => {
     if (player.seat === null) return;
@@ -499,7 +516,7 @@ function buildHand(room: RoomInternal): SocketResult {
 }
 
 function variantLabel(variant: Variant): string {
-  return variant === 'holdem' ? "No-Limit Hold'em" : variant === 'omaha4' ? 'PLO 4-card' : '5-card Omaha';
+  return variant === 'holdem' ? "No-Limit Hold'em" : 'PLO 4-card';
 }
 
 export function startGame(room: RoomInternal, player: PlayerInternal): SocketResult {
@@ -561,6 +578,8 @@ export function act(
   player: PlayerInternal,
   payload: { action: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in'; amount?: number; nonce: number }
 ): SocketResult {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   const hand = room.hand;
   if (!hand || room.lifecycle !== 'playing') return { ok: false, error: 'No active hand.' };
   if (player.seat === null || hand.currentTurnSeat !== player.seat) return { ok: false, error: 'It is not your turn.' };
@@ -848,50 +867,19 @@ function applySevenTwoBounty(room: RoomInternal, live: ParticipantInternal[], aw
   });
 }
 
+const chipSupport = { activeHand: hasActiveHand, audit, requireHost, requirePlayer: requireActivePlayer };
+
 export function requestChips(room: RoomInternal, player: PlayerInternal, amountInput: number, reasonInput = ''): SocketResult {
-  if (player.spectator) return { ok: false, error: 'Spectators do not have stacks.' };
-  const amount = clampInt(amountInput, 1, 1000000, 0);
-  const reason = cleanChat(reasonInput) || 'play-money chip request';
-  if (!amount) return { ok: false, error: 'Enter a valid chip amount.' };
-  if (room.settings.chipMode === 'strict' && room.hand && room.hand.phase !== 'complete') {
-    audit(room, 'chips.deferred', `${player.name} requested ${amount}; strict mode defers active-hand chip changes`, player.id);
-    player.pendingChipRequest = { amount, reason, at: Date.now() };
-    return { ok: true };
-  }
-  if (room.settings.selfServiceChips || room.settings.autoApproveChips) {
-    addChips(room, player, amount, reason, player.id);
-    return { ok: true };
-  }
-  player.pendingChipRequest = { amount, reason, at: Date.now() };
-  audit(room, 'chips.requested', `${player.name} requested ${amount} chips`, player.id, { amount, reason });
-  return { ok: true };
+  return requestChipsWithSupport(chipSupport, room, player, amountInput, reasonInput);
 }
 
 export function approveChips(room: RoomInternal, host: PlayerInternal, targetId: string, amountInput: number, reasonInput = ''): SocketResult {
-  const hostError = requireHost(room, host);
-  if (hostError) return hostError;
-  const target = room.players.get(targetId);
-  if (!target) return { ok: false, error: 'Player not found.' };
-  const amount = clampInt(amountInput || target.pendingChipRequest?.amount, -1000000, 1000000, 0);
-  const reason = cleanChat(reasonInput || target.pendingChipRequest?.reason || 'host chip edit');
-  if (!amount) return { ok: false, error: 'Enter a valid chip amount.' };
-  addChips(room, target, amount, reason, host.id);
-  target.pendingChipRequest = undefined;
-  return { ok: true };
-}
-
-function addChips(room: RoomInternal, target: PlayerInternal, amount: number, reason: string, actorId: string): void {
-  target.stack += amount;
-  if (amount > 0) target.buyInTotal += amount;
-  if (target.stack > 0 && target.status === 'busted') target.status = 'seated';
-  audit(room, amount >= 0 ? 'chips.added' : 'chips.removed', `${target.name} ${amount >= 0 ? 'received' : 'lost'} ${Math.abs(amount)} chips: ${reason}`, actorId, {
-    targetId: target.id,
-    amount,
-    reason
-  });
+  return approveChipsWithSupport(chipSupport, room, host, targetId, amountInput, reasonInput);
 }
 
 export function queueMode(room: RoomInternal, player: PlayerInternal, mode: CustomModeName): SocketResult {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   const error = validateMode(room.settings, mode);
   if (error) return { ok: false, error };
   if (room.queuedMode) return { ok: false, error: `${room.queuedMode.label} is already queued.` };
@@ -951,6 +939,7 @@ export function hostAction(
     if (payload.action === 'ban') {
       target.banned = true;
       room.bannedTokens.add(target.sessionToken);
+      target.socketIds.clear();
     }
     audit(room, payload.action === 'ban' ? 'host.ban' : 'host.kick', `${target.name} was ${payload.action === 'ban' ? 'banned' : 'kicked'}`, host.id, {
       targetId: target.id
@@ -961,6 +950,8 @@ export function hostAction(
 }
 
 export function addChat(room: RoomInternal, player: PlayerInternal, input: string): SocketResult {
+  const accessError = requireActivePlayer(player);
+  if (accessError) return accessError;
   if (player.muted) return { ok: false, error: 'You are muted.' };
   if (rateLimited(player.chatTimestamps, 6, 6000)) {
     player.muted = true;

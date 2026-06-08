@@ -6,12 +6,8 @@ export function modeLabel(mode: CustomModeName): string {
       return "No-Limit Hold'em";
     case 'omaha4':
       return 'PLO 4-card';
-    case 'omaha5':
-      return '5-card Omaha';
     case 'bomb_pot':
       return 'Bomb pot';
-    case 'double_board':
-      return 'Double board';
     case 'show_one':
       return 'Winner shows one';
     case 'seven_two':
@@ -25,7 +21,7 @@ export function buildQueuedMode(
   queuedByName: string,
   nextHandNumber: number
 ): QueuedCustomMode {
-  const variant: Variant | undefined = mode === 'holdem' || mode === 'omaha4' || mode === 'omaha5' ? mode : undefined;
+  const variant: Variant | undefined = mode === 'holdem' || mode === 'omaha4' ? mode : undefined;
   return {
     id: `${nextHandNumber}-${mode}-${queuedBy}`,
     queuedBy,
@@ -34,7 +30,6 @@ export function buildQueuedMode(
     variant,
     modifiers: {
       bombPot: mode === 'bomb_pot',
-      doubleBoard: mode === 'double_board',
       showOne: mode === 'show_one',
       sevenTwo: mode === 'seven_two'
     },
@@ -45,9 +40,6 @@ export function buildQueuedMode(
 export function validateMode(settings: RoomSettings, mode: CustomModeName): string | null {
   if (!settings.custom.enabled) return 'Custom queue is off.';
   if (!settings.custom.allowedModes.includes(mode)) return `${modeLabel(mode)} is not allowed by host settings.`;
-  if (mode === 'double_board' && !settings.custom.allowedModes.some((allowed) => allowed === 'holdem' || allowed === 'omaha4')) {
-    return 'Double board requires Hold’em or Omaha to be allowed.';
-  }
   return null;
 }
 

@@ -19,9 +19,9 @@ export type Card = `${Rank}${Suit}`;
 export type ChipMode = 'strict' | 'casual';
 export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | 'waiting_bb' | 'busted';
 export type HandPhase = 'idle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
-export type Variant = 'holdem' | 'omaha4' | 'omaha5';
+export type Variant = 'holdem' | 'omaha4';
 export type CustomPermission = 'creator_only' | 'button' | 'everyone_once_per_orbit';
-export type CustomModeName = 'holdem' | 'omaha4' | 'omaha5' | 'bomb_pot' | 'double_board' | 'show_one' | 'seven_two';
+export type CustomModeName = 'holdem' | 'omaha4' | 'bomb_pot' | 'show_one' | 'seven_two';
 
 export interface RoomSettings {
   roomName: string;
@@ -32,7 +32,6 @@ export interface RoomSettings {
   startingStack: number;
   minSeats: number;
   maxSeats: number;
-  actionTimerSeconds: number;
   autoApproveChips: boolean;
   selfServiceChips: boolean;
   chipMode: ChipMode;
@@ -52,7 +51,6 @@ export interface RoomSettings {
   sevenTwo: {
     enabled: boolean;
     bounty: number;
-    showdownOnly: boolean;
     suitedBonus: number;
   };
   largeBetThresholdPct: number;

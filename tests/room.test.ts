@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, createRoom, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
+import { act, approveChips, createRoom, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
 function setupThreePlayers() {
   const created = createRoom('Host', 'Test Room');
@@ -94,5 +94,35 @@ describe('room command model', () => {
     const ended = endSession(room, host);
     expect(ended.ok).toBe(true);
     if (ended.ok) expect(ended.exportText).toContain('Host: buy-ins 1000, stack 1000, cash-out 1000, up/down 0');
+  });
+
+  it('requires a valid session token to join a locked room', () => {
+    const { room, host } = setupThreePlayers();
+    const locked = hostAction(room, host, { action: 'lock', value: true });
+    expect(locked.ok).toBe(true);
+    const joined = joinRoom(room.code, 'Intruder', 'fake-token');
+    expect(joined.ok).toBe(false);
+  });
+
+  it('rejects active-hand seat changes and strict host chip edits', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    expect(sit(room, players[1], 4).ok).toBe(false);
+    const edit = requestChips(room, players[1], 200, 'mid-hand top-up');
+    expect(edit.ok).toBe(true);
+    expect(players[1].stack).toBeLessThanOrEqual(1000);
+    const approved = approveChips(room, host, players[1].id, 200, 'host mid-hand edit');
+    expect(approved.ok).toBe(true);
+    expect(players[1].stack).toBeLessThanOrEqual(1000);
+  });
+
+  it('prevents banned players from issuing room commands and cashes out unseated players', () => {
+    const { room, host, players } = setupThreePlayers();
+    const banned = hostAction(room, host, { action: 'ban', playerId: players[1].id });
+    expect(banned.ok).toBe(true);
+    expect(sit(room, players[1], 4).ok).toBe(false);
+    const ended = endSession(room, host);
+    expect(ended.ok).toBe(true);
+    if (ended.ok) expect(ended.exportText).toContain(`${players[1].name}: buy-ins 1000, stack 1000, cash-out 1000, up/down 0`);
   });
 });
