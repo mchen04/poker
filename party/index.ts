@@ -309,8 +309,10 @@ export default class PokerServer implements Party.Server {
     const room = this.poker;
     if (room.hostId !== leavingPlayerId) return;
     if (room.lifecycle === "ended") return;
+    // Only hand the host badge to another connected human — never a bot, and
+    // never a disconnected player (the leaving host reclaims it on reconnect).
     const candidate = [...room.players.values()].find(
-      (p) => p.id !== leavingPlayerId && p.socketIds.size > 0 && !p.spectator && !p.banned
+      (p) => p.id !== leavingPlayerId && !p.isBot && p.socketIds.size > 0 && !p.spectator && !p.banned
     );
     if (!candidate) return;
     const previous = room.players.get(leavingPlayerId);

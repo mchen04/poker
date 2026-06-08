@@ -49,6 +49,7 @@ export class BotController {
     if (!joined.ok) return joined;
     const bot = room.players.get(joined.playerId);
     if (!bot) return { ok: false, error: "Bot join failed." };
+    bot.isBot = true;
     bot.socketIds.add(`bot:${bot.id}`);
     const seat = room.seats.findIndex((s) => s === null);
     if (seat >= 0) sit(room, bot, seat);

@@ -71,7 +71,7 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
         <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 4, padding: 7, borderRadius: 9, background: "rgba(0,0,0,0.3)", border: `1px solid ${p.id === myId ? "rgba(201,165,74,0.5)" : "rgba(255,255,255,0.07)"}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontWeight: 800, color: D.goldBright }}>
-              {p.isHost ? "👑 " : ""}{p.name}{p.id === myId ? " (you)" : ""}
+              {p.isHost ? "👑 " : ""}{p.name}{p.isBot ? " 🤖" : ""}{p.id === myId ? " (you)" : ""}
             </span>
             <span style={{ fontWeight: 900 }}>{chips(p.stack)}</span>
           </div>
@@ -86,11 +86,17 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
           )}
           {isHost && p.id !== myId && (
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              <MiniBtn label={p.muted ? "Unmute" : "Mute"} onClick={() => hostAction("mute", p.id, !p.muted)} />
-              <MiniBtn label={p.forcedSitOut ? "Sit in" : "Sit out"} onClick={() => hostAction("forceSitOut", p.id, !p.forcedSitOut)} />
-              <MiniBtn label="Transfer host" onClick={() => hostAction("transferHost", p.id)} />
-              <MiniBtn label="Kick" tone="danger" onClick={() => hostAction("kick", p.id)} />
-              <MiniBtn label="Ban" tone="danger" onClick={() => hostAction("ban", p.id)} />
+              {p.isBot ? (
+                <MiniBtn label="Remove bot" tone="danger" onClick={() => send({ type: "removeBot", playerId: p.id })} />
+              ) : (
+                <>
+                  <MiniBtn label={p.muted ? "Unmute" : "Mute"} onClick={() => hostAction("mute", p.id, !p.muted)} />
+                  <MiniBtn label={p.forcedSitOut ? "Sit in" : "Sit out"} onClick={() => hostAction("forceSitOut", p.id, !p.forcedSitOut)} />
+                  <MiniBtn label="Transfer host" onClick={() => hostAction("transferHost", p.id)} />
+                  <MiniBtn label="Kick" tone="danger" onClick={() => hostAction("kick", p.id)} />
+                  <MiniBtn label="Ban" tone="danger" onClick={() => hostAction("ban", p.id)} />
+                </>
+              )}
             </div>
           )}
         </div>

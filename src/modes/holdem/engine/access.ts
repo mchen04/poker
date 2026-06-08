@@ -53,6 +53,7 @@ export function requireReadyParticipant(player: PlayerInternal): AccessError | n
 }
 
 export function requireHostTransferTarget(player: PlayerInternal): AccessError | null {
+  if (player.isBot) return { ok: false, error: 'Host cannot be transferred to a bot.' };
   return requireConnectedSeatedPlayerWithChips(player, 'Host can only transfer to a connected seated player with chips.');
 }
 

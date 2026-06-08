@@ -19,6 +19,7 @@ export interface PlayerInternal {
   socketIds: Set<string>;
   name: string;
   isHost: boolean;
+  isBot: boolean;
   muted: boolean;
   banned: boolean;
   forcedSitOut: boolean;
@@ -98,6 +99,7 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
     id: player.id,
     name: player.name,
     isHost: player.isHost,
+    isBot: player.isBot,
     connected: player.socketIds.size > 0,
     muted: player.muted,
     banned: player.banned,
@@ -236,6 +238,7 @@ export function joinRoom(
       socketIds: new Set(),
       name,
       isHost: true,
+      isBot: false,
       muted: false,
       banned: false,
       forcedSitOut: false,
@@ -268,6 +271,7 @@ export function joinRoom(
     socketIds: new Set(),
     name,
     isHost: false,
+    isBot: false,
     muted: false,
     banned: false,
     forcedSitOut: false,

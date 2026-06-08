@@ -68,6 +68,7 @@ export interface PlayerPublic {
   id: string;
   name: string;
   isHost: boolean;
+  isBot: boolean;
   connected: boolean;
   muted: boolean;
   banned: boolean;
