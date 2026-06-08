@@ -21,3 +21,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 12 | BLOCK | 0/1/0 | 1 | +17 | pass | applied connected seated-with-chips eligibility to creator-only custom queues |
 | 13 | BLOCK | 0/3/0 | 1 | +58 | pass | added no-showdown 7-2 bounty, force-sit-out restore UI state, and ready-gated hand starts |
 | 14 | BLOCK | 0/1/1 | 1 | +7 | pass | gated host-transfer actors and pruned unsupported public contract states |
+| 15 | BLOCK | 0/2/0 | 1 | +20 | pass | made ended socket bookkeeping immutable and normalized raise payloads to target totals |

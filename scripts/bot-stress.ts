@@ -88,7 +88,7 @@ function chooseAction(stack: number, legal: LegalActions) {
     return { action: 'check' as const, nonce };
   }
   if (legal.canRaise && stack > legal.callAmount * 2 && Math.random() < 0.18) {
-    return { action: 'raise' as const, amount: Math.min(legal.maxBet, Math.max(legal.callAmount + room.settings.bigBlind, legal.minRaiseTo)), nonce };
+    return { action: 'raise' as const, amount: Math.min(legal.maxBet, Math.max(legal.minRaiseTo, room.hand!.currentBet + room.settings.bigBlind)), nonce };
   }
   if (legal.canCall && Math.random() < 0.72) return { action: 'call' as const, nonce };
   if (legal.allInAmount > 0 && Math.random() < 0.04) return { action: 'all_in' as const, nonce };

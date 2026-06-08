@@ -260,10 +260,11 @@ function TableView({
   const legal = privateState?.legalActions ?? emptyLegal();
   const myTurn = hand?.currentTurnSeat !== null && me?.seat === hand?.currentTurnSeat;
   const pot = legal.potSize || hand?.pots.reduce((sum, item) => sum + item.amount, 0) || 0;
+  const minActionAmount = legal.canRaise ? legal.minRaiseTo : legal.minBet;
 
   useEffect(() => {
-    setRaiseAmount(Math.max(legal.minBet || legal.minRaiseTo || 0, legal.callAmount || 0));
-  }, [legal.minBet, legal.minRaiseTo, legal.callAmount, hand?.actionNonce]);
+    setRaiseAmount(Math.max(minActionAmount || 0, legal.callAmount || 0));
+  }, [minActionAmount, legal.callAmount, hand?.actionNonce]);
 
   if (!hand) {
     return (
@@ -323,11 +324,11 @@ function TableView({
           <input type="number" value={raiseAmount} onChange={(event) => setRaiseAmount(Number(event.target.value))} />
           <div className="preset-row">
             {[1 / 3, 1 / 2, 2 / 3, 1].map((fraction) => (
-              <button key={fraction} disabled={!myTurn} onClick={() => setRaiseAmount(Math.min(legal.maxBet, Math.max(legal.minBet, Math.round(pot * fraction))))}>
+              <button key={fraction} disabled={!myTurn} onClick={() => setRaiseAmount(Math.min(legal.maxBet, Math.max(minActionAmount, Math.round(pot * fraction))))}>
                 {fraction === 1 ? 'Pot' : `${Math.round(fraction * 100)}%`}
               </button>
             ))}
-            <button disabled={!myTurn} onClick={() => setRaiseAmount(Math.min(legal.maxBet, room.settings.bigBlind * 3))}>3xBB</button>
+            <button disabled={!myTurn} onClick={() => setRaiseAmount(Math.min(legal.maxBet, Math.max(minActionAmount, room.settings.bigBlind * 3)))}>3xBB</button>
           </div>
           <button disabled={!legal.canBet} onClick={() => guardedSubmit('bet', raiseAmount)}>Bet</button>
           <button disabled={!legal.canRaise} onClick={() => guardedSubmit('raise', raiseAmount)}>Raise</button>

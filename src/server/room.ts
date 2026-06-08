@@ -283,6 +283,7 @@ export function joinRoom(
 }
 
 export function attachSocket(room: RoomInternal, playerId: string, socketId: string): void {
+  if (room.lifecycle === 'ended') return;
   const player = room.players.get(playerId);
   if (player && !player.banned) {
     player.socketIds.add(socketId);
@@ -293,18 +294,18 @@ export function attachSocket(room: RoomInternal, playerId: string, socketId: str
 export function detachSocket(socketId: string): RoomInternal[] {
   const changed: RoomInternal[] = [];
   rooms.forEach((room) => {
+    if (room.lifecycle === 'ended') return;
     room.players.forEach((player) => {
       if (player.socketIds.delete(socketId)) {
-        if (room.lifecycle !== 'ended' && player.socketIds.size === 0) {
+        if (player.socketIds.size === 0) {
           player.ready = false;
           player.status = player.forcedSitOut ? 'sitting_out' : player.seat === null ? player.status : 'disconnected';
           audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
           timeoutDisconnectedParticipant(room, player);
         }
-        if (room.lifecycle !== 'ended') changed.push(room);
+        changed.push(room);
       }
     });
-    if (room.lifecycle === 'ended') return;
     if ([...room.players.values()].every((player) => player.socketIds.size === 0)) {
       room.emptySince ??= Date.now();
       audit(room, 'room.empty', 'All browsers disconnected. Room remains only while the server process is alive.');
@@ -591,9 +592,9 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
   if (!participant || participant.folded || participant.allIn) return emptyLegalActions();
   const toCall = Math.max(0, hand.currentBet - participant.currentBet);
   const potSize = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
-  const maxBet = player.stack;
+  const maxBet = participant.currentBet + player.stack;
   const minRaiseTo = hand.currentBet + hand.minRaise;
-  const ploMax = hand.variant === 'holdem' ? maxBet : Math.min(maxBet, potSize + toCall * 2);
+  const ploMax = hand.variant === 'holdem' ? maxBet : participant.currentBet + Math.min(player.stack, potSize + toCall * 2);
   return {
     canFold: toCall > 0,
     canCheck: toCall === 0,
@@ -601,10 +602,10 @@ function legalActionsFor(room: RoomInternal, player: PlayerInternal): LegalActio
     callAmount: Math.min(toCall, player.stack),
     canBet: toCall === 0 && player.stack > 0,
     canRaise: !participant.acted && toCall > 0 && player.stack > toCall && player.stack + participant.currentBet >= minRaiseTo,
-    minBet: Math.min(room.settings.bigBlind, maxBet),
+    minBet: Math.min(room.settings.bigBlind, player.stack),
     minRaiseTo,
     maxBet: Math.max(0, ploMax),
-    allInAmount: hand.variant === 'holdem' || player.stack <= ploMax ? player.stack : 0,
+    allInAmount: hand.variant === 'holdem' || participant.currentBet + player.stack <= ploMax ? player.stack : 0,
     potSize
   };
 }
@@ -651,13 +652,13 @@ export function act(
   } else if (payload.action === 'bet' || payload.action === 'raise') {
     const rawAmount = clampInt(payload.amount, 1, Number.MAX_SAFE_INTEGER, 0);
     if (rawAmount > legal.maxBet) return { ok: false, error: 'Bet is larger than the legal maximum.' };
-    const amount = rawAmount;
+    const amount = payload.action === 'raise' ? rawAmount - participant.currentBet : rawAmount;
     const targetBet = participant.currentBet + amount;
     if (payload.action === 'bet' && !legal.canBet) return { ok: false, error: 'Bet is not legal.' };
     if (payload.action === 'raise' && !legal.canRaise) return { ok: false, error: 'Raise is not legal.' };
     if (payload.action === 'bet' && amount < legal.minBet && amount < player.stack) return { ok: false, error: `Minimum bet is ${legal.minBet}.` };
     if (payload.action === 'raise' && targetBet < legal.minRaiseTo && amount < player.stack) return { ok: false, error: `Minimum raise is to ${legal.minRaiseTo}.` };
-    if (amount > legal.maxBet) return { ok: false, error: 'Bet is larger than your stack.' };
+    if (amount > player.stack) return { ok: false, error: 'Bet is larger than your stack.' };
     const previousBet = hand.currentBet;
     moveChips(player, participant, amount);
     if (participant.currentBet > hand.currentBet) {

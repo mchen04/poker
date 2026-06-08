@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { act, addChat, approveChips, createRoom, detachSocket, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame, updateSettings } from '../src/server/room';
+import { act, addChat, approveChips, attachSocket, createRoom, detachSocket, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
 function setupThreePlayers() {
   const created = createRoom('Host', 'Test Room');
@@ -201,6 +201,19 @@ describe('room command model', () => {
     expect(snapshot(room, firstPlayer.id).privateState?.legalActions.canCall).toBe(true);
   });
 
+  it('treats raise amounts as target totals, not extra chips', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    const participant = hand.participants.get(actor.seat!)!;
+    const legal = snapshot(room, actor.id).privateState!.legalActions;
+    expect(participant.currentBet).toBeGreaterThan(0);
+    expect(legal.minRaiseTo).toBe(hand.currentBet + hand.minRaise);
+    expect(act(room, actor, { action: 'raise', amount: legal.minRaiseTo, nonce: hand.actionNonce }).ok).toBe(true);
+    expect(participant.currentBet).toBe(legal.minRaiseTo);
+  });
+
   it('rejects starting a new hand while another hand is active', () => {
     const { room, host } = setupThreePlayers();
     expect(startGame(room, host).ok).toBe(true);
@@ -288,10 +301,15 @@ describe('room command model', () => {
     expect(room.audit).toHaveLength(auditCount);
     const hostStatus = host.status;
     const hostSocket = [...host.socketIds][0];
+    const publicBeforeSocketChange = JSON.stringify(snapshot(room, host.id).publicState);
+    attachSocket(room, host.id, 'ended-reattach');
+    expect([...host.socketIds]).toEqual([hostSocket]);
     expect(detachSocket(hostSocket)).toEqual([]);
+    expect([...host.socketIds]).toEqual([hostSocket]);
     expect(host.status).toBe(hostStatus);
     expect(room.emptySince).toBeNull();
     expect(room.audit).toHaveLength(auditCount);
+    expect(JSON.stringify(snapshot(room, host.id).publicState)).toBe(publicBeforeSocketChange);
     const again = endSession(room, host);
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.exportJson).toBe(exportJson);
