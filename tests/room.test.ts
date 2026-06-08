@@ -15,6 +15,7 @@ function setupThreePlayers() {
     const player = playerInRoom(room, result.playerId)!;
     player.socketIds.add(`${name}-socket`);
     sit(room, player, index + 1);
+    setReady(room, player, true);
     return player;
   });
   return { room, host, players: [host, ...joined] };
@@ -226,6 +227,20 @@ describe('room command model', () => {
     expect(room.hand).toBeNull();
   });
 
+  it('requires ready connected seated players before starting a hand', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(setReady(room, players[1], false).ok).toBe(true);
+    const spectatorJoin = joinRoom(room.code, 'Ready Rail', undefined, true);
+    expect(spectatorJoin.ok).toBe(true);
+    if (!spectatorJoin.ok) throw new Error('spectator join failed');
+    const spectator = playerInRoom(room, spectatorJoin.playerId)!;
+    spectator.socketIds.add('ready-rail');
+    expect(setReady(room, spectator, true).ok).toBe(false);
+    const started = startGame(room, host);
+    expect(started.ok).toBe(true);
+    expect(room.hand?.participants.has(players[1].seat!)).toBe(false);
+  });
+
   it('rejects destructive host moderation while a hand is active', () => {
     const { room, host, players } = setupThreePlayers();
     expect(startGame(room, host).ok).toBe(true);
@@ -375,6 +390,7 @@ describe('room command model', () => {
     const { room, host, players } = setupThreePlayers();
     const target = players[1];
     expect(hostAction(room, host, { action: 'forceSitOut', playerId: target.id }).ok).toBe(true);
+    expect(snapshot(room, host.id).publicState.players.find((player) => player.id === target.id)?.forcedSitOut).toBe(true);
     expect(sit(room, target, 4).ok).toBe(false);
     const socket = [...target.socketIds][0];
     detachSocket(socket);
@@ -384,6 +400,7 @@ describe('room command model', () => {
     expect(target.status).toBe('sitting_out');
     expect(sit(room, target, 4).ok).toBe(false);
     expect(hostAction(room, host, { action: 'forceSitOut', playerId: target.id, value: false }).ok).toBe(true);
+    expect(snapshot(room, host.id).publicState.players.find((player) => player.id === target.id)?.forcedSitOut).toBe(false);
     expect(sit(room, target, 4).ok).toBe(true);
   });
 
@@ -423,5 +440,22 @@ describe('room command model', () => {
     const actor = [...room.players.values()].find((player) => player.seat === participants[0].seat)!;
     expect(act(room, actor, { action: 'check', nonce: hand.actionNonce }).ok).toBe(true);
     expect(observer.stack).toBe(777);
+  });
+
+  it('applies 7-2 bounty when the hand is won without showdown', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const [winner, folder, alreadyFolded] = [...hand.participants.values()];
+    winner.holeCards = ['7s', '2d'];
+    folder.folded = false;
+    folder.currentBet = 0;
+    alreadyFolded.folded = true;
+    hand.currentBet = 10;
+    hand.currentTurnSeat = folder.seat;
+    const folderPlayer = playerInRoom(room, folder.playerId)!;
+    expect(act(room, folderPlayer, { action: 'fold', nonce: hand.actionNonce }).ok).toBe(true);
+    expect(room.hand?.phase).toBe('complete');
+    expect(room.audit.some((entry) => entry.type === 'bounty.seven_two' && entry.actor === winner.playerId)).toBe(true);
   });
 });

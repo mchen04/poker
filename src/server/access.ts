@@ -33,6 +33,10 @@ export function eligiblePlayers(room: RoomInternal): PlayerInternal[] {
     .filter((player): player is PlayerInternal => Boolean(player && isConnectedSeatedPlayerWithChips(player)));
 }
 
+export function readyEligiblePlayers(room: RoomInternal): PlayerInternal[] {
+  return eligiblePlayers(room).filter((player) => player.ready);
+}
+
 export function requireConnectedSeatedPlayerWithChips(player: PlayerInternal, error: string): AccessError | null {
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
@@ -42,6 +46,10 @@ export function requireConnectedSeatedPlayerWithChips(player: PlayerInternal, er
 
 export function requireQueueParticipant(player: PlayerInternal): AccessError | null {
   return requireConnectedSeatedPlayerWithChips(player, 'Only connected seated players with chips can queue a custom hand.');
+}
+
+export function requireReadyParticipant(player: PlayerInternal): AccessError | null {
+  return requireConnectedSeatedPlayerWithChips(player, 'Only connected seated players with chips can mark ready.');
 }
 
 export function requireHostTransferTarget(player: PlayerInternal): AccessError | null {

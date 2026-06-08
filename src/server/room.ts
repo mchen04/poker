@@ -6,7 +6,7 @@ import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload } from './hostControls';
 import { handToPublic } from './projection';
-import { eligiblePlayers, hasActiveHand, rateLimited, reconcileHandParticipants, reconcileStackStatus, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant } from './access';
+import { eligiblePlayers, hasActiveHand, rateLimited, readyEligiblePlayers, reconcileHandParticipants, reconcileStackStatus, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant, requireReadyParticipant } from './access';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -102,6 +102,7 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
     connected: player.socketIds.size > 0,
     muted: player.muted,
     banned: player.banned,
+    forcedSitOut: player.forcedSitOut,
     seat: player.seat,
     stack: player.stack,
     buyInTotal: player.buyInTotal,
@@ -296,6 +297,7 @@ export function detachSocket(socketId: string): RoomInternal[] {
     room.players.forEach((player) => {
       if (player.socketIds.delete(socketId)) {
         if (room.lifecycle !== 'ended' && player.socketIds.size === 0) {
+          player.ready = false;
           player.status = player.forcedSitOut ? 'sitting_out' : player.seat === null ? player.status : 'disconnected';
           audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
           timeoutDisconnectedParticipant(room, player);
@@ -407,8 +409,8 @@ export function sit(room: RoomInternal, player: PlayerInternal, seat: number): S
 export function setReady(room: RoomInternal, player: PlayerInternal, ready: boolean): SocketResult {
   const lifecycleError = requireMutableRoom(room);
   if (lifecycleError) return lifecycleError;
-  const accessError = requireActivePlayer(player);
-  if (accessError) return accessError;
+  const readyError = requireReadyParticipant(player);
+  if (readyError) return readyError;
   player.ready = ready;
   audit(room, ready ? 'player.ready' : 'player.unready', `${player.name} is ${ready ? 'ready' : 'not ready'}`, player.id);
   return { ok: true };
@@ -443,8 +445,8 @@ function postBlind(room: RoomInternal, hand: HandInternal, seat: number | null, 
 }
 
 function buildHand(room: RoomInternal): SocketResult {
-  const players = eligiblePlayers(room);
-  if (players.length < room.settings.minSeats) return { ok: false, error: `Need at least ${room.settings.minSeats} seated players with chips.` };
+  const players = readyEligiblePlayers(room);
+  if (players.length < room.settings.minSeats) return { ok: false, error: `Need at least ${room.settings.minSeats} ready seated players with chips.` };
 
   const buttonSeat = nextOccupiedSeat(room, room.lastButtonSeat, players);
   if (buttonSeat === null) return { ok: false, error: 'No eligible button seat.' };
@@ -803,10 +805,12 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   if (!hand || !player) return;
   const total = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
   player.stack += total;
+  const awards = [`${player.name} won ${total} without showdown.`];
+  if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
   hand.phase = 'complete';
   hand.currentTurnSeat = null;
-  hand.winners = [player.name];
-  hand.summary = `${player.name} won ${total} without showdown.`;
+  hand.winners = awards;
+  hand.summary = awards.join(' · ');
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   reconcileHandParticipants(room, hand);
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });

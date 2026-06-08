@@ -479,7 +479,9 @@ function HostControls({ room, setNotice }: { room: RoomPublicState; setNotice: (
         <div className="moderation-row" key={player.id}>
           <span>{player.name}</span>
           <button onClick={() => send.hostAction({ action: 'mute', playerId: player.id, value: !player.muted }, (result) => !result.ok && setNotice(result.error))}>Mute</button>
-          <button onClick={() => send.hostAction({ action: 'forceSitOut', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Sit out</button>
+          <button onClick={() => send.hostAction({ action: 'forceSitOut', playerId: player.id, value: !player.forcedSitOut }, (result) => !result.ok && setNotice(result.error))}>
+            {player.forcedSitOut ? 'Restore' : 'Sit out'}
+          </button>
           <button onClick={() => send.hostAction({ action: 'transferHost', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Host</button>
           <button className="danger" onClick={() => send.hostAction({ action: 'kick', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>
             <Ban size={14} />

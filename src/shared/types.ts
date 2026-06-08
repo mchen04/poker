@@ -69,6 +69,7 @@ export interface PlayerPublic {
   connected: boolean;
   muted: boolean;
   banned: boolean;
+  forcedSitOut: boolean;
   seat: number | null;
   stack: number;
   buyInTotal: number;

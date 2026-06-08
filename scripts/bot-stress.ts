@@ -1,4 +1,4 @@
-import { act, createRoom, getRoom, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame } from '../src/server/room';
+import { act, createRoom, getRoom, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame } from '../src/server/room';
 import type { LegalActions, PlayerPublic } from '../src/shared/types';
 
 const targetHands = Number(process.env.HANDS ?? 1000);
@@ -26,6 +26,7 @@ let lastTotal = totalChips();
 while (completed < targetHands) {
   if (progressEvery === 1) console.log(`stress starting hand ${completed + 1}/${targetHands}`);
   topUpBustedPlayers();
+  readyBots();
   maybeQueueMode();
   if (progressEvery === 1) console.log('stress calling startGame');
   const started = startGame(room, host);
@@ -98,6 +99,14 @@ function topUpBustedPlayers() {
   room.players.forEach((player) => {
     if (!player.spectator && player.stack < room.settings.bigBlind * 2) {
       requestChips(room, player, room.settings.buyIn, 'bot top-up');
+    }
+  });
+}
+
+function readyBots() {
+  room.players.forEach((player) => {
+    if (!player.spectator && player.seat !== null && player.socketIds.size > 0 && player.stack > 0 && player.status === 'seated') {
+      setReady(room, player, true);
     }
   });
 }
