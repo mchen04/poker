@@ -7,7 +7,7 @@
 3. Share the room code or invite link.
 4. Seat players in the lobby.
 5. Adjust settings before a hand starts.
-6. Start the hand once enough seated players have chips.
+6. Start the hand once enough seated, connected, ready players have chips.
 
 ## Settings
 

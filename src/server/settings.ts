@@ -2,7 +2,7 @@ import type { CustomModeName, CustomPermission, RoomSettings, RoomSettingsPatch 
 import { cleanName, clampInt } from '../shared/sanitize';
 
 const customModes: CustomModeName[] = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'];
-const customPermissions: CustomPermission[] = ['creator_only', 'button', 'everyone_once_per_orbit'];
+const customPermissions: CustomPermission[] = ['creator_only', 'button', 'everyone_with_cooldown'];
 
 export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
   return {
@@ -26,7 +26,7 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
     },
     custom: {
       enabled: true,
-      permission: 'everyone_once_per_orbit',
+      permission: 'everyone_with_cooldown',
       cooldownHands: 4,
       allowedModes: ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two']
     },

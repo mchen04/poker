@@ -90,7 +90,7 @@ const settingsSchema = z
     custom: z
       .object({
         enabled: z.boolean().optional(),
-        permission: z.enum(['creator_only', 'button', 'everyone_once_per_orbit']).optional(),
+        permission: z.enum(['creator_only', 'button', 'everyone_with_cooldown']).optional(),
         cooldownHands: z.number().finite().optional(),
         allowedModes: z.array(z.enum(customModes)).max(customModes.length).optional()
       })
