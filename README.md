@@ -1,53 +1,69 @@
-# Feltline Private Poker
+# Ding
 
-Feltline is a browser-based private home-game poker app for friends. It is play-money only: no accounts, database, deposits, withdrawals, rake, marketplace chips, cash-out flow, or real-money settlement.
+A multiplayer collaborative poker game. Players work together to rank every hand at the table in true poker-strength order across preflop → flop → turn → river → reveal. A perfect ranking wins; any inversion loses.
 
-Rooms are ephemeral and live only in server memory. If the server restarts, the room is gone unless the host exported the session summary first.
-
-## Current MVP
-
-- Create lobby and join lobby with an 8-character room code.
-- Display-name prompt before entering a room.
-- Host-controlled lobby settings for blinds, buy-in, starting stack, minimum seats, self-service chips, straddle, custom queue, and 7-2 bounty.
-- Seat selection, ready state, scoreboard, buy-in/up-down tracking, chip requests, and host chip approval.
-- Server-authoritative NL Hold'em hands with blinds, UTG straddle, betting, all-in, side pots, split pots, showdown, and audit log entries.
-- Queued one-hand custom modes: Hold'em, PLO 4-card, bomb pot, winner shows one card, and 7-2 bounty.
-- Host moderation: lock room, spectator toggle, mute, force sit-out, kick, and host transfer.
-- Chat with spam auto-mute.
-- End-session TXT and JSON export. Ended sessions lock commands and keep export available to connected hosts.
-- Server-only shuffle/deck/private-card state with per-player private snapshots and post-hand shuffle commitment/reveal data.
-
-## Setup
+## Quick start
 
 ```bash
 npm install
-npm run dev
+npm run dev          # Next.js (:3000) + PartyKit (:1999)
 ```
 
-Open `http://localhost:5173/`.
+Open http://localhost:3000, share the 6-character room code, ready up, play. Up to 8 players (humans or bots).
 
-For a production-style client build:
+## How it plays
+
+- Creator picks hands per player (1–6, capped so total ≤ 22), an optional game timer, and an optional round timer.
+- Each phase: fill every slot on the ranking board (1 = best, N = worst), then ready up. Disconnected players don't block the phase.
+- Move chips between players with **acquire** / **offer** / **swap** proposals. The recipient accepts or rejects; the initiator can cancel.
+- Reveal flips hands worst-rank first. Owner flips by default; if the owner is offline, anyone can flip on their behalf so reveal doesn't stall.
+- Score = inversion count (pairwise misorderings). 0 = perfect.
+
+## Stack
+
+| Layer        | Tech                                                      |
+| ------------ | --------------------------------------------------------- |
+| Framework    | Next.js 14 (App Router)                                   |
+| Multiplayer  | [PartyKit](https://www.partykit.io/) (WebSocket server)   |
+| Hand eval    | [pokersolver](https://github.com/goldfire/pokersolver)    |
+| Styling      | Tailwind CSS                                              |
+
+## Architecture in one paragraph
+
+The PartyKit server is the single source of truth (`party/index.ts` is a thin orchestrator over `ConnectionManager`, `RoomStorage`, `AlarmScheduler`, `LobbySweeper`). Every player and bot action flows through one dispatcher (`party/pipeline/dispatch.ts`) that routes to a per-action reducer (`src/modes/ding/reducers.ts`), bumps `state.gen`, runs invariants, and lets `MaskBroadcaster` send each connection a per-player masked view (skipped when byte-identical to the previous broadcast). Mode-specific logic — phases, hand evaluation, strength scoring, reveal — lives behind a `GameMode` plugin contract (`src/lib/gameMode/types.ts`) under `src/modes/ding/`. Adding a second mode is one folder + one registry line.
+
+The client mounts a `GameSessionProvider` (socket lifecycle + identity + notifications) and routes phases through `GameModeRouter`. The lobby is height-bounded and fits a 720px viewport without scrolling.
+
+## Project layout
+
+```
+party/        PartyKit server (orchestrator + pipeline + state + handlers)
+src/app/      Next.js App Router pages
+src/components/, src/contexts/, src/hooks/   UI + hooks
+src/lib/      Shared types, constants, design tokens, AI, gameMode/ subsystem
+src/modes/    Per-mode implementations (ding/ today)
+```
+
+## Common commands
 
 ```bash
-npm run build
-npm start
+npm run dev          # both dev servers
+npm run build        # production build
+npm run party:deploy # deploy PartyKit
 ```
 
-The server listens on `http://localhost:3001/` and serves the built client from `dist/`.
+## Where to look next
 
-## Verification
+- **`AGENTS.md`** — full developer guide: pipeline, GameMode contract, AI internals, common tasks, troubleshooting.
+- **`src/lib/gameMode/`** — the GameMode contract, the 328-mode catalogue (declarative YAML + codegen), and shared deal/showdown/visibility helpers. The dealChoice variant registry lives at `src/lib/gameMode/dealChoices/`; per-mechanic phase-effect handlers live under `party/effects/`. `npm run modes:check` is the umbrella gate: codegen drift + handler-contract audit + `verify-mechanics --strict`.
+- **`src/modes/ding/`** — Ding-specific runtime implementation.
+
+## Deployment
+
+Deploy the Next.js app to any standard host (e.g. Vercel). Deploy the PartyKit server separately:
 
 ```bash
-npm run typecheck
-npm test
-npm run stress
-npm run build
+npm run party:deploy
 ```
 
-`npm run stress` runs 1,000 scripted bot hands by default, including stale duplicate action submissions and privacy checks for current public board state.
-
-The final manual verification used isolated browser sessions for a host and two players. It covered create/join, seating, ready state, private-card isolation, Hold'em, PLO 4-card, bomb pot, straddle, chip requests, reconnect, host controls, audit log, end/export, and responsive snapshots.
-
-## Important Boundary
-
-This app is for private social play-money games. It intentionally has no persistence, payments, rake, user accounts, deposits, withdrawals, marketplace, or real-money settlement features.
+Set `NEXT_PUBLIC_PARTYKIT_HOST` in your production environment to point at the deployed PartyKit host.

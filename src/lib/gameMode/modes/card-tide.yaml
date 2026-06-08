@@ -1,0 +1,22 @@
+id: card-tide
+name: Card Tide
+shortName: Tide
+summary: Every street, all ranks drift upward.
+detail: All ranks shift +1 at flop, turn, and river.
+family: environment
+tags:
+  - late-detonation
+  - weather
+tier: insanity
+deal:
+  extends: standard
+phaseEffects:
+  flop:
+    - incrementAllRanks
+  turn:
+    - incrementAllRanks
+  river:
+    - incrementAllRanks
+infoFeatures:
+  - card-tide
+score: high

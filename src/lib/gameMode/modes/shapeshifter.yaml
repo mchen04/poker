@@ -1,0 +1,22 @@
+id: shapeshifter
+name: Shapeshifter
+shortName: Shifter
+summary: One community card changes identity each street.
+detail: The first community card upgrades one rank at flop, turn, and river.
+family: environment
+tags:
+  - late-detonation
+  - weather
+tier: insanity
+deal:
+  extends: standard
+phaseEffects:
+  flop:
+    - incrementFirstCommunityRank
+  turn:
+    - incrementFirstCommunityRank
+  river:
+    - incrementFirstCommunityRank
+infoFeatures:
+  - shapeshifter
+score: high
