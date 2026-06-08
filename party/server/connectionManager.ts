@@ -16,6 +16,11 @@ export class ConnectionManager {
     this.connections.delete(connId);
   }
 
+  /** O(1) lookup of a live connection by id. */
+  get(connId: string): Party.Connection | undefined {
+    return this.connections.get(connId);
+  }
+
   /** Number of currently-live connections. */
   size(): number {
     return this.connections.size;

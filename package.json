@@ -21,7 +21,8 @@
     "partysocket": "^1.0.2",
     "pokersolver": "^2.1.4",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -35,7 +36,6 @@
     "tsx": "^4.22.0",
     "typescript": "^5",
     "vitest": "^2.1.8",
-    "ws": "^8.18.0",
-    "zod": "^4.4.3"
+    "ws": "^8.18.0"
   }
 }

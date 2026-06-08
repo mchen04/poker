@@ -338,7 +338,7 @@ export default class PokerServer implements Party.Server {
 
   private disconnectKicked(connIds: string[]): void {
     for (const connId of connIds) {
-      const conn = [...this.conns.values()].find((c) => c.id === connId);
+      const conn = this.conns.get(connId);
       this.connPlayer.delete(connId);
       if (conn) {
         this.send(conn, { type: "kicked", message: "You were removed from this private room by the host." });

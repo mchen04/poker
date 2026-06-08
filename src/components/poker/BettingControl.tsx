@@ -144,7 +144,7 @@ export function BettingControl({
               value={Math.round(target)}
               min={minTarget}
               max={maxTarget}
-              onChange={(e) => setTarget(Number(e.target.value) || 0)}
+              onChange={(e) => setTarget(Number(e.target.value) || minTarget)}
               onBlur={() => setTarget((t) => clamp(t, minTarget, maxTarget))}
               aria-label="Bet amount"
               style={{

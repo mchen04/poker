@@ -110,6 +110,13 @@ export function HostSettings({
       </Section>
 
       <Section title="Table rules">
+        <Pick
+          label="Chip changes"
+          value={draft.chipMode}
+          options={["strict", "casual"]}
+          disabled={disabled}
+          onChange={(v) => set("chipMode", v as RoomSettings["chipMode"])}
+        />
         <Toggle label="Self-service chips" value={draft.selfServiceChips} disabled={disabled} onChange={(v) => set("selfServiceChips", v)} />
         <Toggle label="Auto-approve chips" value={draft.autoApproveChips} disabled={disabled} onChange={(v) => set("autoApproveChips", v)} />
         <Toggle label="Spectators allowed" value={draft.spectatorsAllowed} disabled={disabled} onChange={(v) => set("spectatorsAllowed", v)} />

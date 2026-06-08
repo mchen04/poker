@@ -7,7 +7,8 @@ export function getSeatPosition(
 ): { x: number; y: number } {
   const step = 360 / totalPlayers;
   // Self always at 90° (bottom center). Angle 0° = right, 90° = bottom.
-  const angleDeg = ((playerIndex - selfIndex) * step + 90 + 3600) % 360;
+  // Positive-modulo so a negative (playerIndex - selfIndex) still wraps to [0,360).
+  const angleDeg = ((((playerIndex - selfIndex) * step + 90) % 360) + 360) % 360;
   const angleRad = (angleDeg * Math.PI) / 180;
   return {
     x: 50 + xRadius * Math.cos(angleRad),

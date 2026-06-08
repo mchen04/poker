@@ -169,8 +169,6 @@ export interface RoomPublicState {
   chat: ChatEntry[];
   hand: HandPublic | null;
   queuedMode: QueuedCustomMode | null;
-  rateLimitNotice?: string;
-  exportWarning: string;
 }
 
 export interface PrivateState {
@@ -179,7 +177,6 @@ export interface PrivateState {
   sessionToken: string;
   holeCards: Card[];
   legalActions: LegalActions;
-  reconnectTokenValid: boolean;
 }
 
 export interface LegalActions {

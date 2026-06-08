@@ -130,8 +130,7 @@ export function publicState(room: RoomInternal): RoomPublicState {
     audit: room.audit.slice(-250),
     chat: room.chat.slice(-120),
     hand: handToPublic(room.hand),
-    queuedMode: room.queuedMode,
-    exportWarning: 'Play-money room state is in memory only. Export before ending the session or closing the server.'
+    queuedMode: room.queuedMode
   };
 }
 
@@ -144,8 +143,7 @@ export function privateState(room: RoomInternal, player: PlayerInternal | null):
     roomCode: room.code,
     sessionToken: player.sessionToken,
     holeCards: participant?.holeCards ?? [],
-    legalActions,
-    reconnectTokenValid: true
+    legalActions
   };
 }
 
@@ -362,8 +360,8 @@ export function updateSettings(room: RoomInternal, player: PlayerInternal, patch
   const hostError = requireHost(room, player);
   if (hostError) return hostError;
   if (room.lifecycle === 'playing' && room.hand && room.hand.phase !== 'complete') {
-    audit(room, 'settings.deferred_rejected', 'Rejected mid-hand setting change; pause or wait for next hand.', player.id);
-    return { ok: false, error: 'Setting changes apply between hands. Pause or finish the hand first.' };
+    audit(room, 'settings.deferred_rejected', 'Rejected mid-hand setting change; it applies after the current hand.', player.id);
+    return { ok: false, error: 'Setting changes apply between hands — finish the current hand first.' };
   }
 
   const next = sanitizeSettings(room.settings, patch);
@@ -533,9 +531,8 @@ function buildHand(room: RoomInternal): SocketResult {
     postBlind(room, hand, bigBlindSeat, room.settings.bigBlind, 'big blind');
     if (straddleSeat !== null) postBlind(room, hand, straddleSeat, Math.max(room.settings.straddle.amount, room.settings.bigBlind * 2), 'straddle');
   } else {
-    hand.smallBlindSeat = null;
-    hand.bigBlindSeat = null;
-    hand.straddleSeat = null;
+    // Bomb pot: seats/bets are already null/zero from the hand initializer; just
+    // collect the ante from everyone and deal straight to the flop.
     hand.participants.forEach((participant) => {
       const player = room.players.get(participant.playerId);
       if (!player) return;
@@ -545,9 +542,6 @@ function buildHand(room: RoomInternal): SocketResult {
       participant.committedThisHand += ante;
       if (player.stack === 0) participant.allIn = true;
     });
-    hand.currentBet = 0;
-    hand.minRaise = room.settings.bigBlind;
-    hand.fullRaiseBase = 0;
     dealStreet(hand, 'flop');
     audit(room, 'modifier.applied', `Bomb pot posted ${Math.max(room.settings.bigBlind, room.settings.ante)} from each player and skipped preflop betting.`);
   }
@@ -1016,7 +1010,7 @@ export function endSession(room: RoomInternal, host: PlayerInternal): SocketResu
   const hostError = requireHost(room, host);
   if (hostError) return hostError;
   if (room.endedExport) return { ok: true, ...room.endedExport };
-  if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish or pause the hand before ending the session.' };
+  if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish the current hand before ending the session.' };
   room.lifecycle = 'ended';
   finalizeStacks(room);
   audit(room, 'session.ended', `${host.name} ended the session and generated export`, host.id);

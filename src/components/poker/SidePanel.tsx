@@ -101,6 +101,9 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
               )}
             </div>
           )}
+          {isHost && !p.banned && (
+            <HostChipAdjust playerId={p.id} defaultAmount={publicState.settings.buyIn} send={send} />
+          )}
         </div>
         );
       })}
@@ -240,6 +243,38 @@ function MiniBtn({ label, onClick, tone }: { label: string; onClick: () => void;
     >
       {label}
     </button>
+  );
+}
+
+/** Host-only inline control: add or remove chips from a player, with a reason. */
+function HostChipAdjust({ playerId, defaultAmount, send }: { playerId: string; defaultAmount: number; send: (cmd: ClientCommand) => void }) {
+  const [amt, setAmt] = useState(defaultAmount);
+  const [why, setWhy] = useState("");
+  const apply = (sign: 1 | -1) => {
+    if (amt <= 0) return;
+    send({ type: "approveChips", playerId, amount: sign * amt, reason: why.trim() || (sign > 0 ? "host added chips" : "host removed chips") });
+    setWhy("");
+  };
+  return (
+    <div style={{ display: "flex", gap: 4, marginTop: 2, alignItems: "center" }}>
+      <input
+        type="number"
+        min={1}
+        value={amt}
+        onChange={(e) => setAmt(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        aria-label="Chip adjustment amount"
+        style={{ width: 60, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.goldBright, fontWeight: 800, textAlign: "center", padding: "3px", fontSize: 11 }}
+      />
+      <input
+        value={why}
+        placeholder="reason"
+        onChange={(e) => setWhy(e.target.value)}
+        aria-label="Chip adjustment reason"
+        style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.text, fontSize: 11, padding: "3px 6px" }}
+      />
+      <MiniBtn label="+ Chips" onClick={() => apply(1)} />
+      <MiniBtn label="− Chips" tone="danger" onClick={() => apply(-1)} />
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import NameModal from "@/components/NameModal";
 import { GameSessionProvider } from "@/contexts/GameSession";
 import { GameModeRouter } from "@/components/GameModeRouter";
+import { PLAYER_NAME_KEY } from "@/lib/constants";
 
 /**
  * Room shell — owns just the name-prompt gate. Once a name is committed,
@@ -18,13 +19,13 @@ export default function RoomPage() {
   const [showNameModal, setShowNameModal] = useState(false);
 
   useEffect(() => {
-    const storedName = sessionStorage.getItem("poker-player-name");
+    const storedName = sessionStorage.getItem(PLAYER_NAME_KEY);
     if (storedName) setPlayerName(storedName);
     else setShowNameModal(true);
   }, []);
 
   function handleNameSubmit(name: string) {
-    sessionStorage.setItem("poker-player-name", name);
+    sessionStorage.setItem(PLAYER_NAME_KEY, name);
     setPlayerName(name);
     setShowNameModal(false);
   }

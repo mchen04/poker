@@ -6,3 +6,6 @@ export const END_GAME_CONFIRM_MS = 4000;
 
 /** Transient toast lifetime (ms). */
 export const TOAST_DURATION_MS = 3200;
+
+/** sessionStorage key for the player's chosen display name. */
+export const PLAYER_NAME_KEY = "poker-player-name";

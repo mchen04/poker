@@ -4,13 +4,12 @@ import type { Card as CardT } from "@/modes/holdem/shared/types";
 import { parseCard } from "@/lib/utils";
 import { D } from "@/lib/theme";
 
-type Size = "xs" | "sm" | "md" | "lg";
+type Size = "xs" | "sm" | "md";
 
 const DIMS: Record<Size, { w: number; h: number; rank: number; pip: number }> = {
   xs: { w: 26, h: 38, rank: 13, pip: 12 },
   sm: { w: 38, h: 54, rank: 18, pip: 16 },
   md: { w: 52, h: 74, rank: 24, pip: 22 },
-  lg: { w: 68, h: 96, rank: 32, pip: 30 },
 };
 
 /** A single playing card. Pass `card` for a face-up card, omit it for a back. */
