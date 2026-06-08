@@ -440,7 +440,7 @@ function postBlind(room: RoomInternal, hand: HandInternal, seat: number | null, 
   participant.committedThisHand += paid;
   if (player.stack === 0) participant.allIn = true;
   hand.currentBet = Math.max(hand.currentBet, participant.currentBet);
-  hand.minRaise = Math.max(hand.minRaise, room.settings.bigBlind);
+  if (paid >= amount) hand.minRaise = Math.max(hand.minRaise, paid);
   audit(room, 'blind.posted', `${player.name} posted ${label} ${paid}`, player.id, { seat, amount: paid, label });
 }
 
@@ -677,7 +677,8 @@ export function act(
   } else if (payload.action === 'all_in') {
     const amount = player.stack;
     if (amount <= 0) return { ok: false, error: 'No chips to move all-in.' };
-    if (hand.variant !== 'holdem' && amount > legal.maxBet && amount > legal.callAmount) {
+    const allInTarget = participant.currentBet + amount;
+    if (hand.variant !== 'holdem' && allInTarget > legal.maxBet && amount > legal.callAmount) {
       return { ok: false, error: 'Pot-limit maximum is lower than all-in.' };
     }
     const previousBet = hand.currentBet;

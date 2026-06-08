@@ -184,8 +184,22 @@ describe('room command model', () => {
     const hand = room.hand!;
     const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
     const legal = snapshot(room, actor.id).privateState!.legalActions;
-    expect(legal.maxBet).toBeLessThan(actor.stack);
-    const result = act(room, actor, { action: 'raise', amount: actor.stack, nonce: hand.actionNonce });
+    expect(legal.maxBet).toBeLessThan(actor.stack + hand.participants.get(actor.seat!)!.currentBet);
+    const result = act(room, actor, { action: 'raise', amount: legal.maxBet + 1, nonce: hand.actionNonce });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects PLO all-ins above the pot-limit target cap after posted chips', () => {
+    const { room, host } = setupThreePlayers();
+    expect(queueMode(room, host, 'omaha4').ok).toBe(true);
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    const participant = hand.participants.get(actor.seat!)!;
+    const legal = snapshot(room, actor.id).privateState!.legalActions;
+    expect(participant.currentBet).toBeGreaterThan(0);
+    expect(participant.currentBet + actor.stack).toBeGreaterThan(legal.maxBet);
+    const result = act(room, actor, { action: 'all_in', nonce: hand.actionNonce });
     expect(result.ok).toBe(false);
   });
 
@@ -198,7 +212,9 @@ describe('room command model', () => {
     const expectedFirst = (hand.straddleSeat! + 1) % room.seats.length;
     expect(hand.currentTurnSeat).toBe(expectedFirst);
     const firstPlayer = [...room.players.values()].find((player) => player.seat === expectedFirst)!;
-    expect(snapshot(room, firstPlayer.id).privateState?.legalActions.canCall).toBe(true);
+    const legal = snapshot(room, firstPlayer.id).privateState!.legalActions;
+    expect(legal.canCall).toBe(true);
+    expect(legal.minRaiseTo).toBe(40);
   });
 
   it('treats raise amounts as target totals, not extra chips', () => {

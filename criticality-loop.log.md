@@ -23,3 +23,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 14 | BLOCK | 0/1/1 | 1 | +7 | pass | gated host-transfer actors and pruned unsupported public contract states |
 | 15 | BLOCK | 0/2/0 | 1 | +20 | pass | made ended socket bookkeeping immutable and normalized raise payloads to target totals |
 | 16 | BLOCK | 0/1/1 | 1 | +0 | pass | renamed custom queue permission to cooldown semantics and updated ready-start docs |
+| 17 | BLOCK | 0/2/0 | 1 | +17 | pass | fixed live straddle min-raise and PLO all-in target-cap validation |
