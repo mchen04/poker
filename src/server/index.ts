@@ -61,6 +61,8 @@ function fail(message: string): { ok: false; error: string } {
   return { ok: false, error: message };
 }
 
+const joinAttempts = new Map<string, number[]>();
+
 const customModes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
 const settingsSchema = z
   .object({
@@ -164,6 +166,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('joinRoom', safeHandler(schemas.joinRoom, (payload, ack) => {
+    if (tooManyJoinAttempts(socket.handshake.address ?? socket.id)) return ack(fail('Too many join attempts. Try again shortly.'));
     const result = joinRoom(payload.code, payload.name, payload.sessionToken, payload.spectator);
     if (!result.ok) return ack(result);
     const room = getRoom(result.code);
@@ -174,7 +177,7 @@ io.on('connection', (socket) => {
     attachSocket(room, result.playerId, socket.id);
     ack(result);
     emitRoom(result.code);
-  }));
+}));
 
   socket.on('updateSettings', safeHandler(schemas.updateSettings, (payload, ack) => {
     withPlayer(socket.data.roomCode, socket.data.playerId, ack, (room, player) => updateSettings(room, player, payload));
@@ -271,6 +274,15 @@ function withPlayer<T extends SocketResult>(
   ack(result);
   afterResult?.(result, room);
   if (shouldEmit || result.ok) emitRoom(code);
+}
+
+function tooManyJoinAttempts(key: string): boolean {
+  const now = Date.now();
+  const attempts = joinAttempts.get(key) ?? [];
+  attempts.push(now);
+  while (attempts.length && attempts[0] < now - 30_000) attempts.shift();
+  joinAttempts.set(key, attempts);
+  return attempts.length > 20;
 }
 
 const port = Number(process.env.PORT ?? 3001);

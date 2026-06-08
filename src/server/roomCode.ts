@@ -1,4 +1,6 @@
+import { randomInt } from 'node:crypto';
+
 export function makeCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  return Array.from({ length: 8 }, () => alphabet[randomInt(alphabet.length)]).join('');
 }

@@ -132,7 +132,7 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
 
 function publicHand(hand: HandInternal | null): HandPublic | null {
   if (!hand) return null;
-  const { deck: _deck, shuffleSeed: _seed, participants: _participants, ...visible } = hand;
+  const { deck: _deck, initialDeck: _initialDeck, shuffleSeed: _seed, participants: _participants, ...visible } = hand;
   return { ...visible };
 }
 
@@ -655,8 +655,10 @@ export function act(
     const previousBet = hand.currentBet;
     moveChips(player, participant, amount);
     if (participant.currentBet > hand.currentBet) {
+      const raiseSize = participant.currentBet - previousBet;
       hand.currentBet = participant.currentBet;
-      if (hand.currentBet - previousBet >= hand.minRaise) {
+      if (raiseSize >= hand.minRaise) {
+        hand.minRaise = raiseSize;
         hand.participants.forEach((entry) => {
           if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
         });

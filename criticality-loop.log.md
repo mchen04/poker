@@ -12,3 +12,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 3 | BLOCK | 0/4/0 | 1 | +0 | pass | fixed bomb-pot blind residue, PLO pot-limit caps, kicked-session invalidation, host ownership guards, extracted host controls, room.ts 947 lines |
 | 4 | BLOCK | 1/3/0 | 1 | +5 | pass | fixed participant-only 7-2 bounty, socket-aware kick/ban disconnect, narrowed docs, and shuffle reveal preimage verification |
 | 5 | BLOCK | 0/1/0 | 1 | +5 | pass | excluded disconnected seated players from new hands and connected bot/test sessions explicitly |
+| 6 | BLOCK | 1/4/0 | 1 | +54 | pass | fixed active public deck leak, all-in min-raise, CSPRNG room codes, join attempt limiting, spectator chip edits, and disconnected host transfer |

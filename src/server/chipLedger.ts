@@ -48,6 +48,7 @@ export function approveChipsWithSupport(
   if (hostError) return hostError;
   const target = room.players.get(targetId);
   if (!target) return { ok: false, error: 'Player not found.' };
+  if (target.spectator || target.banned) return { ok: false, error: 'Chip edits require an active player stack.' };
   const amount = clampInt(amountInput || target.pendingChipRequest?.amount, -1000000, 1000000, 0);
   const reason = cleanChat(reasonInput || target.pendingChipRequest?.reason || 'host chip edit');
   if (!amount) return { ok: false, error: 'Enter a valid chip amount.' };

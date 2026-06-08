@@ -34,6 +34,17 @@ describe('room command model', () => {
     expect(publicCards.join(' ')).not.toContain(hostPrivate.holeCards[0]);
   });
 
+  it('does not expose server-only deck fields in active public hand snapshots', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const publicJson = JSON.stringify(snapshot(room, host.id).publicState.hand);
+    expect(publicJson).not.toContain('deck');
+    expect(publicJson).not.toContain('initialDeck');
+    expect(publicJson).not.toContain('shuffleSeed');
+    expect(publicJson).not.toContain('participants');
+    snapshot(room, host.id).privateState?.holeCards.forEach((card) => expect(publicJson).not.toContain(card));
+  });
+
   it('rejects stale duplicate actions by nonce', () => {
     const { room, host } = setupThreePlayers();
     startGame(room, host);
@@ -44,6 +55,20 @@ describe('room command model', () => {
     expect(result.ok).toBe(true);
     const stale = act(room, actingPlayer, { action: legal.canCall ? 'call' : 'check', nonce: hand.actionNonce - 1 });
     expect(stale.ok).toBe(false);
+  });
+
+  it('updates min raise after a full all-in raise', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    const previousBet = hand.currentBet;
+    const previousMinRaise = hand.minRaise;
+    actor.stack = previousMinRaise * 3;
+    expect(act(room, actor, { action: 'all_in', nonce: hand.actionNonce }).ok).toBe(true);
+    const raiseSize = room.hand!.currentBet - previousBet;
+    expect(raiseSize).toBeGreaterThanOrEqual(previousMinRaise);
+    expect(room.hand!.minRaise).toBe(raiseSize);
   });
 
   it('queues an MVP custom mode and audit logs chip requests', () => {
@@ -201,7 +226,17 @@ describe('room command model', () => {
     if (spectatorJoin.ok) {
       const spectator = playerInRoom(room, spectatorJoin.playerId)!;
       expect(hostAction(room, host, { action: 'transferHost', playerId: spectator.id }).ok).toBe(false);
+      expect(approveChips(room, host, spectator.id, 100, 'spectator edit').ok).toBe(false);
     }
+    players[2].socketIds.clear();
+    players[2].status = 'disconnected';
+    expect(hostAction(room, host, { action: 'transferHost', playerId: players[2].id }).ok).toBe(false);
+  });
+
+  it('generates high-entropy room codes for invite-bearing rooms', () => {
+    const created = createRoom('Host', 'Code Check');
+    expect(created.ok).toBe(true);
+    if (created.ok) expect(created.code).toMatch(/^[A-Z0-9]{8}$/);
   });
 
   it('charges 7-2 bounty only to players dealt into the hand', () => {
