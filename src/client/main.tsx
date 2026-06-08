@@ -193,6 +193,7 @@ function RoomView({ snapshot, setNotice }: { snapshot: ServerSnapshot; setNotice
   const room = snapshot.publicState;
   const me = room.players.find((player) => player.id === snapshot.privateState?.playerId);
   const isHost = Boolean(me?.isHost);
+  const ended = room.lifecycle === 'ended';
   const [tab, setTab] = useState<'table' | 'lobby' | 'settings' | 'audit'>('table');
 
   return (
@@ -207,7 +208,7 @@ function RoomView({ snapshot, setNotice }: { snapshot: ServerSnapshot; setNotice
           <button className="ghost" onClick={() => setTab('audit')}>
             <Shield size={17} /> Audit
           </button>
-          {isHost && <EndSession setNotice={setNotice} />}
+          {isHost && <EndSession ended={ended} setNotice={setNotice} />}
         </div>
       </header>
 
@@ -220,6 +221,7 @@ function RoomView({ snapshot, setNotice }: { snapshot: ServerSnapshot; setNotice
       </nav>
 
       <div className="play-money-banner">{room.exportWarning}</div>
+      {ended && <div className="play-money-banner ended">Session ended. Commands are locked; the export remains available.</div>}
       {room.queuedMode && <div className="mode-banner"><Zap size={18} /> Next hand: {room.queuedMode.label}, queued by {room.queuedMode.queuedByName}</div>}
 
       {tab === 'table' && <TableView room={room} privateState={snapshot.privateState} me={me} setNotice={setNotice} />}
@@ -282,6 +284,11 @@ function TableView({
       if (!result.ok) setNotice(result.error);
     });
   };
+  const confirmMove = confirm
+    ? confirm.action === 'all_in'
+      ? me?.stack ?? 0
+      : Math.max(0, confirm.amount - (confirm.action === 'raise' ? me?.currentBet ?? 0 : 0))
+    : 0;
   const guardedSubmit = (action: 'bet' | 'raise' | 'all_in', amount: number) => {
     const stack = me?.stack ?? 0;
     const large = stack > 0 && amount >= stack * (room.settings.largeBetThresholdPct / 100) && action !== 'all_in';
@@ -342,7 +349,9 @@ function TableView({
         <div className="modal-backdrop">
           <div className="confirm-dialog">
             <h2>Confirm {confirm.action.replace('_', '-')}</h2>
-            <p>Commit {confirm.amount} chips. Remaining stack: {Math.max(0, (me?.stack ?? 0) - confirm.amount)}.</p>
+            <p>
+              Move {confirmMove} chips{confirm.action === 'raise' ? ` to reach ${confirm.amount} total` : ''}. Remaining stack: {Math.max(0, (me?.stack ?? 0) - confirmMove)}.
+            </p>
             <button className="danger" onClick={() => { submit(confirm.action, confirm.amount); setConfirm(null); }}>Confirm</button>
             <button className="ghost" onClick={() => setConfirm(null)}>Cancel</button>
           </div>
@@ -413,12 +422,13 @@ function LobbyView({ room, me, setNotice }: { room: RoomPublicState; me?: Player
 }
 
 function LobbyStart({ room, me, setNotice }: { room: RoomPublicState; me?: PlayerPublic; setNotice: (message: string) => void }) {
+  const ended = room.lifecycle === 'ended';
   return (
     <div className="control-strip">
-      <button disabled={!me?.isHost} className="primary" onClick={() => send.startGame({}, (result) => !result.ok && setNotice(result.error))}>
+      <button disabled={!me?.isHost || ended} className="primary" onClick={() => send.startGame({}, (result) => !result.ok && setNotice(result.error))}>
         <Play size={18} /> Start hand
       </button>
-      <button onClick={() => send.ready({ ready: !me?.ready }, (result) => !result.ok && setNotice(result.error))}>
+      <button disabled={ended} onClick={() => send.ready({ ready: !me?.ready }, (result) => !result.ok && setNotice(result.error))}>
         <Check size={18} /> {me?.ready ? 'Ready' : 'Mark ready'}
       </button>
       <span>{room.players.filter((player) => player.seat !== null && player.stack > 0).length}/{room.settings.minSeats} seated</span>
@@ -429,19 +439,20 @@ function LobbyStart({ room, me, setNotice }: { room: RoomPublicState; me?: Playe
 function ChipControls({ room, me, setNotice }: { room: RoomPublicState; me?: PlayerPublic; setNotice: (message: string) => void }) {
   const [amount, setAmount] = useState(room.settings.buyIn);
   const [reason, setReason] = useState('rebuy/top-up');
+  const ended = room.lifecycle === 'ended';
   return (
     <div className="panel-block">
       <h2><CircleDollarSign size={18} /> Chips</h2>
       <div className="inline-form">
-        <input type="number" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
-        <input value={reason} onChange={(event) => setReason(event.target.value)} />
-        <button onClick={() => send.requestChips({ amount, reason }, (result) => !result.ok && setNotice(result.error))}>Request</button>
+        <input disabled={ended} type="number" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+        <input disabled={ended} value={reason} onChange={(event) => setReason(event.target.value)} />
+        <button disabled={ended} onClick={() => send.requestChips({ amount, reason }, (result) => !result.ok && setNotice(result.error))}>Request</button>
       </div>
       {me?.isHost &&
         room.players
           .filter((player) => player.badges.includes('Chip request'))
           .map((player) => (
-            <button key={player.id} onClick={() => send.approveChips({ playerId: player.id, amount, reason: 'host approved' }, (result) => !result.ok && setNotice(result.error))}>
+            <button disabled={ended} key={player.id} onClick={() => send.approveChips({ playerId: player.id, amount, reason: 'host approved' }, (result) => !result.ok && setNotice(result.error))}>
               Approve {player.name}
             </button>
           ))}
@@ -465,26 +476,35 @@ function Scoreboard({ room }: { room: RoomPublicState }) {
 }
 
 function HostControls({ room, setNotice }: { room: RoomPublicState; setNotice: (message: string) => void }) {
+  const ended = room.lifecycle === 'ended';
   return (
     <div className="panel-block">
       <h2><Crown size={18} /> Host</h2>
       <div className="control-strip wrap">
-        <button onClick={() => send.hostAction({ action: 'lock', value: !room.settings.locked }, (result) => !result.ok && setNotice(result.error))}>
+        <button disabled={ended} onClick={() => send.hostAction({ action: 'lock', value: !room.settings.locked }, (result) => !result.ok && setNotice(result.error))}>
           <Lock size={16} /> {room.settings.locked ? 'Unlock' : 'Lock'}
         </button>
-        <button onClick={() => send.hostAction({ action: 'spectators', value: !room.settings.spectatorsAllowed }, (result) => !result.ok && setNotice(result.error))}>
+        <button disabled={ended} onClick={() => send.hostAction({ action: 'spectators', value: !room.settings.spectatorsAllowed }, (result) => !result.ok && setNotice(result.error))}>
           <Eye size={16} /> Spectators {room.settings.spectatorsAllowed ? 'on' : 'off'}
         </button>
       </div>
       {room.players.filter((player) => !player.isHost).map((player) => (
         <div className="moderation-row" key={player.id}>
           <span>{player.name}</span>
-          <button onClick={() => send.hostAction({ action: 'mute', playerId: player.id, value: !player.muted }, (result) => !result.ok && setNotice(result.error))}>Mute</button>
-          <button onClick={() => send.hostAction({ action: 'forceSitOut', playerId: player.id, value: !player.forcedSitOut }, (result) => !result.ok && setNotice(result.error))}>
+          <button disabled={ended} onClick={() => send.hostAction({ action: 'mute', playerId: player.id, value: !player.muted }, (result) => !result.ok && setNotice(result.error))}>
+            {player.muted ? 'Unmute' : 'Mute'}
+          </button>
+          <button disabled={ended} onClick={() => send.hostAction({ action: 'forceSitOut', playerId: player.id, value: !player.forcedSitOut }, (result) => !result.ok && setNotice(result.error))}>
             {player.forcedSitOut ? 'Restore' : 'Sit out'}
           </button>
-          <button onClick={() => send.hostAction({ action: 'transferHost', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Host</button>
-          <button className="danger" onClick={() => send.hostAction({ action: 'kick', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>
+          <button disabled={ended} onClick={() => send.hostAction({ action: 'transferHost', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}>Host</button>
+          <button
+            aria-label={`Kick ${player.name}`}
+            className="danger"
+            disabled={ended}
+            title={`Kick ${player.name}`}
+            onClick={() => send.hostAction({ action: 'kick', playerId: player.id }, (result) => !result.ok && setNotice(result.error))}
+          >
             <Ban size={14} />
           </button>
         </div>
@@ -495,12 +515,13 @@ function HostControls({ room, setNotice }: { room: RoomPublicState; setNotice: (
 
 function QueueModes({ room, setNotice }: { room: RoomPublicState; setNotice: (message: string) => void }) {
   const modes: CustomModeName[] = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'];
+  const ended = room.lifecycle === 'ended';
   return (
     <div className="panel-block custom-queue">
       <h2><Zap size={18} /> Custom queue</h2>
       <div className="mode-buttons">
         {modes.map((mode) => (
-          <button key={mode} disabled={!room.settings.custom.enabled || Boolean(room.queuedMode)} onClick={() => send.queueMode({ mode }, (result) => !result.ok && setNotice(result.error))}>
+          <button key={mode} disabled={ended || !room.settings.custom.enabled || Boolean(room.queuedMode)} onClick={() => send.queueMode({ mode }, (result) => !result.ok && setNotice(result.error))}>
             {modeLabel(mode)}
           </button>
         ))}
@@ -524,7 +545,7 @@ function SettingsView({ room, isHost, setNotice }: { room: RoomPublicState; isHo
       <label className="toggle-line"><input type="checkbox" checked={settings.straddle.enabled} onChange={(event) => setSettings({ ...settings, straddle: { ...settings.straddle, enabled: event.target.checked } })} /> UTG straddle</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.custom.enabled} onChange={(event) => setSettings({ ...settings, custom: { ...settings.custom, enabled: event.target.checked } })} /> Custom queue on</label>
       <label className="toggle-line"><input type="checkbox" checked={settings.sevenTwo.enabled} onChange={(event) => setSettings({ ...settings, sevenTwo: { ...settings.sevenTwo, enabled: event.target.checked } })} /> 7-2 bounty</label>
-      <button disabled={!isHost} className="primary" onClick={() => send.updateSettings(settings, (result) => !result.ok && setNotice(result.error))}>
+      <button disabled={!isHost || room.lifecycle === 'ended'} className="primary" onClick={() => send.updateSettings(settings, (result) => !result.ok && setNotice(result.error))}>
         <Settings size={18} /> Apply settings
       </button>
       <p className="boundary wide">Major setting changes are rejected during active hands and audit logged. Chip mode defaults to strict table-stakes accounting.</p>
@@ -575,7 +596,7 @@ function AuditView({ room }: { room: RoomPublicState }) {
   );
 }
 
-function EndSession({ setNotice }: { setNotice: (message: string) => void }) {
+function EndSession({ ended, setNotice }: { ended: boolean; setNotice: (message: string) => void }) {
   return (
     <button
       className="ghost"
@@ -588,7 +609,7 @@ function EndSession({ setNotice }: { setNotice: (message: string) => void }) {
         })
       }
     >
-      <Download size={17} /> End
+      <Download size={17} /> {ended ? 'Export' : 'End'}
     </button>
   );
 }

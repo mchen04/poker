@@ -260,6 +260,12 @@ label {
   background: rgba(10, 65, 52, 0.72);
 }
 
+.play-money-banner.ended {
+  border-color: rgba(239, 102, 102, 0.5);
+  color: #ffd5d5;
+  background: rgba(94, 29, 29, 0.34);
+}
+
 .table-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
