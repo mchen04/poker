@@ -67,9 +67,14 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     if (target.seat !== null) room.seats[target.seat] = null;
     target.seat = null;
     target.status = 'sitting_out';
-    target.banned = true;
-    room.bannedTokens.add(target.sessionToken);
+    target.ready = false;
     target.socketIds.clear();
+    // Kick removes + disconnects but lets the player rejoin; ban also blocks the
+    // session token from ever rejoining.
+    if (payload.action === 'ban') {
+      target.banned = true;
+      room.bannedTokens.add(target.sessionToken);
+    }
     support.audit(room, payload.action === 'ban' ? 'host.ban' : 'host.kick', `${target.name} was ${payload.action === 'ban' ? 'banned' : 'kicked'}`, host.id, {
       targetId: target.id
     });

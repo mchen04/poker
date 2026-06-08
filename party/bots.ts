@@ -20,6 +20,9 @@ const THINK_MIN_MS = 650;
 const THINK_MAX_MS = 1700;
 const MAINTAIN_DEBOUNCE_MS = 40;
 
+/** Synthetic socket id that marks a bot as "connected" to the engine. */
+const botSocketId = (id: string): string => `bot:${id}`;
+
 export class BotController {
   private meta: Record<string, BotMeta> = {};
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -32,7 +35,7 @@ export class BotController {
     this.meta = (meta as Record<string, BotMeta>) ?? {};
     for (const id of Object.keys(this.meta)) {
       const bot = room.players.get(id);
-      if (bot) bot.socketIds.add(`bot:${id}`);
+      if (bot) bot.socketIds.add(botSocketId(id));
       else delete this.meta[id];
     }
   }
@@ -43,14 +46,16 @@ export class BotController {
 
   addBot(room: RoomInternal): SocketResult {
     if (room.lifecycle === "ended") return { ok: false, error: "Session has ended." };
-    if (Object.keys(this.meta).length >= room.settings.maxSeats) return { ok: false, error: "No seats left for another bot." };
+    // Only add a bot when there is an actual open seat (humans count too) so
+    // seatless phantom bots can't accumulate and block real joiners.
+    if (!room.seats.some((s) => s === null)) return { ok: false, error: "No open seat for a bot." };
     const name = pickBotName(room);
     const joined = joinRoom(room, name);
     if (!joined.ok) return joined;
     const bot = room.players.get(joined.playerId);
     if (!bot) return { ok: false, error: "Bot join failed." };
     bot.isBot = true;
-    bot.socketIds.add(`bot:${bot.id}`);
+    bot.socketIds.add(botSocketId(bot.id));
     const seat = room.seats.findIndex((s) => s === null);
     if (seat >= 0) sit(room, bot, seat);
     setReady(room, bot, true);
@@ -116,7 +121,7 @@ export class BotController {
       const bot = room.players.get(id);
       if (!bot) continue;
       if (bot.socketIds.size === 0) {
-        bot.socketIds.add(`bot:${id}`);
+        bot.socketIds.add(botSocketId(id));
         changed = true;
       }
       if (activeHand || bot.banned || bot.spectator || bot.forcedSitOut) continue;

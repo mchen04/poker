@@ -49,11 +49,6 @@ export const surfaces = {
   tagBg: "rgba(255,255,255,0.07)",
 } as const;
 
-/** Shadow scrim fragments composable inside boxShadow/textShadow expressions. */
-export const shades = {
-  shadowMedium: "rgba(0,0,0,0.5)",
-} as const;
-
 export const typography = {
   serif: "var(--font-playfair), Georgia, serif",
 } as const;

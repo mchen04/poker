@@ -9,7 +9,7 @@ import { D } from "@/lib/theme";
 const ARM_CONFIRM_MS = 4000;
 
 /**
- * The poker action rail (net-new vs Ding). Fold / Check / Call / All-in quick
+ * The poker action rail. Fold / Check / Call / All-in quick
  * buttons plus a bet/raise sizer with a typed exact-amount input, a slider, and
  * preset sizes (⅓, ½, ⅔, pot, 3×BB, min, max). The slider/input track the
  * TARGET total committed this street; bet sends the increment, raise sends the

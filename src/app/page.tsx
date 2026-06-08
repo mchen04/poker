@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { generateRoomCode } from "@/lib/utils";
 import { ROOM_CODE_LENGTH } from "@/lib/constants";
 import { D } from "@/lib/theme";
-import { shades, shadows, surfaces } from "@/lib/tokens";
+import { shadows, surfaces } from "@/lib/tokens";
 
 export default function HomePage() {
   const router = useRouter();
@@ -69,7 +69,7 @@ export default function HomePage() {
               fontSize: "clamp(72px, 16vw, 120px)",
               fontWeight: 900,
               color: D.goldBright,
-              textShadow: `0 3px 0 #7a5012, 0 6px 30px ${shades.shadowMedium}`,
+              textShadow: "0 3px 0 #7a5012, 0 6px 30px rgba(0,0,0,0.5)",
               letterSpacing: "-0.02em",
             }}
           >

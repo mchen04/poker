@@ -27,7 +27,8 @@ server-authoritative NL Hold'em engine.
   revealed), then the next hand auto-deals. The table persists across hands; the
   button/blinds advance.
 - **One-hand custom modes** (host-gated, queued before a hand): PLO 4-card, bomb
-  pot, winner-shows-one, and forced 7-2. Mandatory straddle is a room setting.
+  pot, winner-shows-one, and mandatory straddle. The 7-2 bounty is a global host
+  setting (below), not a queued one-hand mode.
 - **7-2 bounty** (global host setting): any player who wins a pot holding a 7 and
   a 2 collects the configured bounty from every other player, automatically,
   every hand while enabled (with an optional suited bonus).

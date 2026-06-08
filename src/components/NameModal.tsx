@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { feltSurface } from "@/lib/theme";
 
 interface NameModalProps {
   onSubmit: (name: string) => void;
@@ -48,11 +49,7 @@ export default function NameModal({ onSubmit }: NameModalProps) {
       aria-labelledby="name-modal-title"
       onKeyDown={trapTab}
       className="min-h-[100dvh] flex items-center justify-center"
-      style={{
-        backgroundImage: "url('/felt.png')",
-        backgroundRepeat: "repeat",
-        backgroundSize: "256px 256px",
-      }}
+      style={feltSurface}
     >
       <div className="relative z-10 bg-gray-900 border border-gray-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
         <div className="text-center mb-6">

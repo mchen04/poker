@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useGameSession } from "@/contexts/GameSession";
-import { D } from "@/lib/theme";
+import { D, feltSurface } from "@/lib/theme";
 import { PokerTable } from "./PokerTable";
 import { ActionBar } from "./ActionBar";
 import { LobbyControls } from "./LobbyControls";
@@ -31,12 +31,10 @@ export function RoomView() {
   return (
     <div
       style={{
+        ...feltSurface,
         height: "100dvh",
         display: "flex",
         flexDirection: "column",
-        backgroundImage: "url('/felt.png')",
-        backgroundColor: D.feltLight,
-        backgroundSize: "256px 256px",
         color: "#fff",
         overflow: "hidden",
       }}
@@ -64,6 +62,24 @@ export function RoomView() {
             <PokerTable publicState={publicState} privateState={privateState} myId={myId} />
           </div>
           <div style={{ padding: 10, flexShrink: 0 }}>
+            {notice && (
+              <div
+                role="status"
+                style={{
+                  marginBottom: 8,
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  background: "rgba(20,20,16,0.95)",
+                  border: `1px solid ${D.gold}`,
+                  color: D.goldBright,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textAlign: "center",
+                }}
+              >
+                {notice}
+              </div>
+            )}
             {inLobby ? (
               <LobbyControls publicState={publicState} myId={myId} send={send} />
             ) : (
@@ -84,28 +100,6 @@ export function RoomView() {
           )
         )}
       </div>
-
-      {notice && (
-        <div
-          style={{
-            position: "fixed",
-            top: 64,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 60,
-            padding: "10px 18px",
-            borderRadius: 10,
-            background: "rgba(20,20,16,0.95)",
-            border: `1px solid ${D.gold}`,
-            color: D.goldBright,
-            fontWeight: 700,
-            fontSize: 13,
-            boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
-          }}
-        >
-          {notice}
-        </div>
-      )}
     </div>
   );
 }

@@ -1,14 +1,10 @@
 "use client";
 
-const feltBg = {
-  backgroundImage: "url('/felt.png')",
-  backgroundRepeat: "repeat" as const,
-  backgroundSize: "256px 256px",
-};
+import { feltSurface } from "@/lib/theme";
 
 export default function ConnectionErrorScreen({ message }: { message: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={feltBg}>
+    <div className="min-h-screen flex items-center justify-center" style={feltSurface}>
       <div className="text-center">
         <div className="text-red-400 text-xl font-bold mb-2">Connection Error</div>
         <p className="text-gray-400">{message}</p>

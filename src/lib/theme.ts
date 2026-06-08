@@ -22,3 +22,11 @@ export const D = {
   feltLight: colors.feltLight,
   serif: typography.serif,
 } as const;
+
+/** Shared felt-texture surface (tiled felt.png over the felt color) for full-screen views. */
+export const feltSurface = {
+  backgroundImage: "url('/felt.png')",
+  backgroundColor: colors.feltLight,
+  backgroundRepeat: "repeat" as const,
+  backgroundSize: "256px 256px",
+};

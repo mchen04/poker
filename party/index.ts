@@ -30,6 +30,10 @@ import { BotController } from "./bots";
 /** Delay after a hand completes before the next hand auto-deals (shows the result). */
 const AUTO_NEXT_HAND_MS = 4500;
 
+/** Coarse per-connection inbound flood guard: at most N messages per window. */
+const MAX_MESSAGES_PER_WINDOW = 50;
+const MESSAGE_WINDOW_MS = 5000;
+
 /**
  * PartyKit poker server — one Durable Object per room code. Owns a single
  * server-authoritative `RoomInternal`, validates inbound commands, routes them
@@ -101,7 +105,7 @@ export default class PokerServer implements Party.Server {
     this.connPlayer.delete(conn.id);
     if (playerId) {
       detachSocket(this.poker, conn.id);
-      this.maybeReassignHost(playerId);
+      this.ensureConnectedHost();
       this.broadcast();
     }
     // With no humans connected, pause progression: stop bots and auto-deal, and
@@ -121,7 +125,7 @@ export default class PokerServer implements Party.Server {
     // Coarse per-connection flood guard (per-action/chat limits live in the engine).
     const times = this.msgTimes.get(sender.id) ?? [];
     this.msgTimes.set(sender.id, times);
-    if (rateLimited(times, 50, 5000)) return;
+    if (rateLimited(times, MAX_MESSAGES_PER_WINDOW, MESSAGE_WINDOW_MS)) return;
     let raw: unknown;
     try {
       raw = JSON.parse(message);
@@ -296,6 +300,7 @@ export default class PokerServer implements Party.Server {
     }
     this.connPlayer.set(conn.id, result.playerId);
     attachSocket(this.poker, result.playerId, conn.id);
+    this.ensureConnectedHost();
     this.send(conn, { type: "welcome", playerId: result.playerId, sessionToken: result.sessionToken });
     this.broadcast();
   }
@@ -342,20 +347,24 @@ export default class PokerServer implements Party.Server {
     }
   }
 
-  /** When the host leaves the lobby, hand the badge to another connected seated player. */
-  private maybeReassignHost(leavingPlayerId: string): void {
+  /**
+   * Guarantee the host badge sits on a connected human whenever possible. Runs
+   * after a disconnect and after each join, so a room left leaderless (host
+   * gone, e.g. after a DO reload where their onClose never fired) is rescued by
+   * the next connected human. Never assigns to a bot; if the host is connected
+   * or no human is available, it's a no-op (the original host reclaims it on
+   * reconnect via sessionToken).
+   */
+  private ensureConnectedHost(): void {
     const room = this.poker;
-    if (room.hostId !== leavingPlayerId) return;
     if (room.lifecycle === "ended") return;
-    // Hand the host badge to another connected human (never a bot). If there is
-    // no eligible human, the badge stays with the leaving host, who reclaims it
-    // on reconnect (sessionToken match keeps the same player + isHost).
+    const host = room.players.get(room.hostId);
+    if (host && host.socketIds.size > 0 && !host.banned) return;
     const candidate = [...room.players.values()].find(
-      (p) => p.id !== leavingPlayerId && !p.isBot && p.socketIds.size > 0 && !p.spectator && !p.banned
+      (p) => !p.isBot && p.socketIds.size > 0 && !p.spectator && !p.banned
     );
     if (!candidate) return;
-    const previous = room.players.get(leavingPlayerId);
-    if (previous) previous.isHost = false;
+    if (host) host.isHost = false;
     candidate.isHost = true;
     room.hostId = candidate.id;
   }

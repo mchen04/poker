@@ -399,7 +399,9 @@ describe('room command model', () => {
   it('invalidates kicked players and protects host ownership', () => {
     const { room, host, players } = setupThreePlayers();
     expect(hostAction(room, host, { action: 'kick', playerId: players[1].id }).ok).toBe(true);
-    expect(sit(room, players[1], 4).ok).toBe(false);
+    expect(players[1].seat).toBeNull();
+    expect(players[1].banned).toBe(false); // kick removes + disconnects but is not a ban
+    expect(sit(room, players[1], 4).ok).toBe(true); // a kicked (un-banned) player may rejoin and re-seat
     expect(hostAction(room, host, { action: 'ban', playerId: host.id }).ok).toBe(false);
     const spectatorJoin = joinRoom(room, 'Watcher', undefined, true);
     expect(spectatorJoin.ok).toBe(true);

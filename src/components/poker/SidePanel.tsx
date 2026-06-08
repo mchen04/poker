@@ -67,7 +67,9 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
-      {publicState.players.map((p) => (
+      {publicState.players.map((p) => {
+        const chipReq = p.chipRequest;
+        return (
         <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 4, padding: 7, borderRadius: 9, background: "rgba(0,0,0,0.3)", border: `1px solid ${p.id === myId ? "rgba(201,165,74,0.5)" : "rgba(255,255,255,0.07)"}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontWeight: 800, color: D.goldBright }}>
@@ -79,9 +81,9 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
             <span>{p.seat !== null ? `Seat ${p.seat + 1}` : "Unseated"} · {p.status}{p.ready ? " · ready" : ""}</span>
             <span style={{ color: upDownColor(p.upDown) }}>{upDownLabel(p.upDown)}</span>
           </div>
-          {isHost && p.chipRequest !== null && (
-            <button onClick={() => send({ type: "approveChips", playerId: p.id, amount: p.chipRequest ?? 0, reason: "host approved" })} style={btn(D.goldButton, D.ink)}>
-              Approve {chips(p.chipRequest)} chips
+          {isHost && chipReq !== null && (
+            <button onClick={() => send({ type: "approveChips", playerId: p.id, amount: chipReq, reason: "host approved" })} style={btn(D.goldButton, D.ink)}>
+              Approve {chips(chipReq)} chips
             </button>
           )}
           {isHost && p.id !== myId && (
@@ -100,18 +102,21 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Self chip request / rebuy */}
       {me && me.seat !== null && (
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
           <input
             type="number"
+            min={1}
+            step={publicState.settings.bigBlind}
             value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
+            onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
             style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 7, color: D.goldBright, fontWeight: 800, textAlign: "center", padding: "5px" }}
           />
-          <button onClick={() => send({ type: "requestChips", amount, reason: "rebuy" })} style={btn("rgba(255,255,255,0.08)", D.goldBright)}>
+          <button disabled={amount <= 0} onClick={() => send({ type: "requestChips", amount, reason: "rebuy" })} style={btn("rgba(255,255,255,0.08)", D.goldBright)}>
             {publicState.settings.selfServiceChips ? "Add chips" : "Request chips"}
           </button>
         </div>
