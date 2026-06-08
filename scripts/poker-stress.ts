@@ -6,6 +6,7 @@
  */
 import { act, createEmptyRoom, joinRoom, playerInRoom, queueMode, requestChips, setReady, sit, snapshot, startGame } from '../src/modes/holdem/engine/room';
 import type { LegalActions, PlayerPublic } from '../src/modes/holdem/shared/types';
+import { ALL_CUSTOM_MODES } from '../src/modes/holdem/shared/modes';
 
 const targetHands = Number(process.env.HANDS ?? 1000);
 const progressEvery = Number(process.env.PROGRESS_EVERY ?? 50);
@@ -28,12 +29,14 @@ for (let index = 1; index < 6; index += 1) {
 let completed = 0;
 let illegalRejected = 0;
 let actions = 0;
-let lastTotal = totalChips();
 
 while (completed < targetHands) {
   topUpBustedPlayers();
   readyBots();
   maybeQueueMode();
+  // A hand only moves chips between seated players (antes/blinds/bets/pots/bounty
+  // all net to zero), so the exact stack total must be identical after it settles.
+  const preHandStacks = totalStacks();
   const started = startGame(room, host);
   if (!started.ok) throw new Error(started.error);
 
@@ -57,14 +60,16 @@ while (completed < targetHands) {
     assertNoLeak();
   }
 
+  const postHandStacks = totalStacks();
+  if (postHandStacks !== preHandStacks) {
+    throw new Error(`Chip conservation violated in hand ${completed + 1}: ${preHandStacks} -> ${postHandStacks}`);
+  }
+  if (postHandStacks <= 0) throw new Error('All chips vanished');
+
   completed += 1;
   if (progressEvery > 0 && completed % progressEvery === 0) {
     console.log(`stress progress: ${completed}/${targetHands} hands, ${actions} actions`);
   }
-  const currentTotal = totalChips();
-  if (currentTotal <= 0) throw new Error('All chips vanished');
-  if (Math.abs(currentTotal - lastTotal) > 1000000) throw new Error(`Unexpected chip drift: ${lastTotal} -> ${currentTotal}`);
-  lastTotal = currentTotal;
 }
 
 console.log(
@@ -115,12 +120,16 @@ function readyBots() {
 
 function maybeQueueMode() {
   if (room.queuedMode || Math.random() > 0.2) return;
-  const modes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle'] as const;
-  queueMode(room, host, modes[Math.floor(Math.random() * modes.length)]);
+  queueMode(room, host, ALL_CUSTOM_MODES[Math.floor(Math.random() * ALL_CUSTOM_MODES.length)]);
 }
 
 function totalChips() {
   return [...room.players.values()].reduce((sum, player) => sum + player.stack + player.cashOut, 0);
+}
+
+/** Live chips in play (stacks only) — the quantity a hand must conserve exactly. */
+function totalStacks() {
+  return [...room.players.values()].reduce((sum, player) => sum + player.stack, 0);
 }
 
 function assertNoLeak() {

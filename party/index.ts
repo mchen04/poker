@@ -24,7 +24,7 @@ import {
 import { rateLimited } from "../src/modes/holdem/engine/access";
 import { ConnectionManager } from "./server/connectionManager";
 import { RoomStorage } from "./server/roomStorage";
-import { AlarmScheduler, EMPTY_ROOM_GRACE_MS } from "./server/alarmScheduler";
+import { AlarmScheduler, EMPTY_ROOM_GRACE_MS, actionClockDeadline } from "./server/alarmScheduler";
 import { BotController } from "./bots";
 
 /** Delay after a hand completes before the next hand auto-deals (shows the result). */
@@ -166,16 +166,8 @@ export default class PokerServer implements Party.Server {
     }
     this.poker.emptySince = null;
     let changed = false;
-    const hand = this.poker.hand;
-    if (
-      this.poker.lifecycle === "playing" &&
-      hand &&
-      hand.phase !== "complete" &&
-      hand.currentTurnSeat !== null &&
-      hand.turnStartedAt !== null &&
-      this.poker.settings.actionTimerSeconds > 0 &&
-      Date.now() >= hand.turnStartedAt + this.poker.settings.actionTimerSeconds * 1000
-    ) {
+    const deadline = actionClockDeadline(this.poker);
+    if (deadline !== null && Date.now() >= deadline) {
       changed = timeoutCurrentActor(this.poker);
     }
     if (this.autoStartAt !== null && Date.now() >= this.autoStartAt) {
@@ -231,8 +223,9 @@ export default class PokerServer implements Party.Server {
         if (!result.ok) this.sendError(conn, result.error, command.reqId);
         else this.broadcast();
       } else {
-        this.botController.removeBot(this.poker, command.playerId);
-        this.broadcast();
+        const result = this.botController.removeBot(this.poker, command.playerId);
+        if (!result.ok) this.sendError(conn, result.error, command.reqId);
+        else this.broadcast();
       }
       return;
     }

@@ -64,10 +64,16 @@ export class BotController {
     return { ok: true };
   }
 
-  removeBot(room: RoomInternal, playerId: string): void {
-    if (!this.isBot(playerId)) return;
+  removeBot(room: RoomInternal, playerId: string): SocketResult {
+    if (!this.isBot(playerId)) return { ok: false, error: "That player is not a bot." };
     const bot = room.players.get(playerId);
-    if (bot && bot.seat !== null) room.seats[bot.seat] = null;
+    if (!bot) return { ok: false, error: "Bot not found." };
+    // Don't yank a bot out of a live hand — it is a participant whose pot
+    // contribution + turn would be orphaned. Remove it between hands.
+    if (room.hand && room.hand.phase !== "complete" && bot.seat !== null && room.hand.participants.has(bot.seat)) {
+      return { ok: false, error: "Can't remove a bot mid-hand; wait for the hand to finish." };
+    }
+    if (bot.seat !== null) room.seats[bot.seat] = null;
     room.players.delete(playerId);
     delete this.meta[playerId];
     const timer = this.timers.get(playerId);
@@ -76,6 +82,7 @@ export class BotController {
       this.timers.delete(playerId);
     }
     this.opts.persistBotMeta(this.meta);
+    return { ok: true };
   }
 
   /** Called after every broadcast: housekeeping + schedule the acting bot. */

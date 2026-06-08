@@ -1,7 +1,7 @@
 import type { Card, Rank, Suit } from './types';
 
-export const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
-export const suits: Suit[] = ['s', 'h', 'd', 'c'];
+const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+const suits: Suit[] = ['s', 'h', 'd', 'c'];
 
 export function freshDeck(): Card[] {
   return suits.flatMap((suit) => ranks.map((rank) => `${rank}${suit}` as Card));

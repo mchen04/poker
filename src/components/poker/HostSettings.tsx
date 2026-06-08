@@ -170,7 +170,7 @@ function Num({ label, value, disabled, onChange }: { label: string; value: numbe
         type="number"
         value={value}
         disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
         style={{ width: 80, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.goldBright, fontWeight: 800, textAlign: "right", padding: "3px 6px" }}
       />
     </Row>

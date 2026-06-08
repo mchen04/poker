@@ -16,6 +16,26 @@ import type { RoomInternal } from "../../src/modes/holdem/engine/room";
 
 export const EMPTY_ROOM_GRACE_MS = 60 * 60 * 1000;
 
+/**
+ * The wall-clock time the current actor's action timer expires, or null when no
+ * action clock is running. Single source of truth shared by the alarm scheduler
+ * (to arm the alarm) and onAlarm (to decide whether to time the actor out).
+ */
+export function actionClockDeadline(room: RoomInternal): number | null {
+  const hand = room.hand;
+  if (
+    room.lifecycle === "playing" &&
+    hand &&
+    hand.phase !== "complete" &&
+    hand.currentTurnSeat !== null &&
+    hand.turnStartedAt !== null &&
+    room.settings.actionTimerSeconds > 0
+  ) {
+    return hand.turnStartedAt + room.settings.actionTimerSeconds * 1000;
+  }
+  return null;
+}
+
 export class AlarmScheduler {
   private lastTarget: number | null = null;
 
@@ -23,16 +43,9 @@ export class AlarmScheduler {
 
   async schedule(room: RoomInternal, autoStartAt: number | null = null): Promise<void> {
     const candidates: number[] = [];
-    const hand = room.hand;
-    if (
-      room.lifecycle === "playing" &&
-      hand &&
-      hand.phase !== "complete" &&
-      hand.currentTurnSeat !== null &&
-      hand.turnStartedAt !== null &&
-      room.settings.actionTimerSeconds > 0
-    ) {
-      candidates.push(hand.turnStartedAt + room.settings.actionTimerSeconds * 1000);
+    const deadline = actionClockDeadline(room);
+    if (deadline !== null) {
+      candidates.push(deadline);
     }
     if (autoStartAt !== null) {
       candidates.push(autoStartAt);

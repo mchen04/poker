@@ -79,7 +79,7 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
             <span style={{ fontWeight: 900 }}>{chips(p.stack)}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: D.sub, fontSize: 10 }}>
-            <span>{p.seat !== null ? `Seat ${p.seat + 1}` : "Unseated"} · {p.status}{p.ready ? " · ready" : ""}</span>
+            <span>{p.seat !== null ? `Seat ${p.seat + 1}` : "Unseated"} · {p.status} · in {chips(p.buyInTotal)}{p.ready ? " · ready" : ""}</span>
             <span style={{ color: upDownColor(p.upDown) }}>{upDownLabel(p.upDown)}</span>
           </div>
           {isHost && chipReq !== null && (
