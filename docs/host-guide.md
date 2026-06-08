@@ -34,4 +34,6 @@ All host actions append audit entries.
 
 ## Export and End Session
 
-Use `End` to generate TXT and JSON exports. Room state is memory-only, so export before closing the server or ending the session.
+Use `End` to generate TXT and JSON exports. Once ended, commands are locked, the host button changes to `Export`, and connected hosts can download the same final export again.
+
+Room state is memory-only, so export before closing the server. Browsers that reconnect after the room is ended are rejected with `Session already ended.`

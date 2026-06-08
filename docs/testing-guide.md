@@ -43,12 +43,16 @@ Use isolated `agent-browser` sessions. Required flows:
 - Verify settings, chip requests, custom queue, audit, host controls, export, and reconnect.
 - Verify responsive layouts at desktop, laptop, tablet, and mobile sizes.
 
+For the final verification pass, CDP image capture timed out in the browser daemon, so responsive verification used accessibility snapshots at 1440px, 1280px, and 390px plus CSS breakpoint inspection. Re-run image screenshots when the browser daemon is responsive.
+
 ## Criticality Loop
 
-After full browser verification, run:
+For major behavior changes, run:
 
 ```text
 /criticality-loop --converge 2 --aggressiveness aggressive
 ```
 
 Fix all important findings, rerun relevant automated and browser verification, and repeat until two consecutive approvals.
+
+The final implementation reached two consecutive approvals in the criticality loop, then received a small post-loop UI polish pass for confirmation copy, accessible host controls, and ended-session presentation. The final automated gates were rerun after that polish.

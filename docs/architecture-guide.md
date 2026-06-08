@@ -28,7 +28,7 @@ Public state does not include hidden cards or deck order while a hand is active.
 
 Rooms have no accounts. A browser session token restores a player's room identity, seat, and private hand state if it reconnects to the same in-memory room. Host kick/ban invalidates the known room session token; without accounts or device fingerprinting, moderation is session-token based.
 
-If the server restarts, room state is lost.
+If the server restarts, room state is lost. If the host ends a room, the server finalizes stacks, stores an idempotent export payload, locks future commands, and rejects later reconnect attempts to that ended room.
 
 ## Validation and Rate Limits
 

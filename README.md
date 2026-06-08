@@ -6,7 +6,7 @@ Rooms are ephemeral and live only in server memory. If the server restarts, the 
 
 ## Current MVP
 
-- Create lobby and join lobby with short room code.
+- Create lobby and join lobby with an 8-character room code.
 - Display-name prompt before entering a room.
 - Host-controlled lobby settings for blinds, buy-in, starting stack, minimum seats, self-service chips, straddle, custom queue, and 7-2 bounty.
 - Seat selection, ready state, scoreboard, buy-in/up-down tracking, chip requests, and host chip approval.
@@ -14,7 +14,7 @@ Rooms are ephemeral and live only in server memory. If the server restarts, the 
 - Queued one-hand custom modes: Hold'em, PLO 4-card, bomb pot, winner shows one card, and 7-2 bounty.
 - Host moderation: lock room, spectator toggle, mute, force sit-out, kick, and host transfer.
 - Chat with spam auto-mute.
-- End-session TXT and JSON export.
+- End-session TXT and JSON export. Ended sessions lock commands and keep export available to connected hosts.
 - Server-only shuffle/deck/private-card state with per-player private snapshots and post-hand shuffle commitment/reveal data.
 
 ## Setup
@@ -45,6 +45,8 @@ npm run build
 ```
 
 `npm run stress` runs 1,000 scripted bot hands by default, including stale duplicate action submissions and privacy checks for current public board state.
+
+The final manual verification used isolated browser sessions for a host and two players. It covered create/join, seating, ready state, private-card isolation, Hold'em, PLO 4-card, bomb pot, straddle, chip requests, reconnect, host controls, audit log, end/export, and responsive snapshots.
 
 ## Important Boundary
 

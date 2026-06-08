@@ -30,6 +30,14 @@ When queued, winning players reveal one card in the audit log after showdown.
 
 The engine builds main and side pots from committed chips, excludes folded players from eligibility, and distributes odd chips deterministically by seat order.
 
+### Betting Command Contract
+
+Raise commands use a target-total amount: raising to 40 means the player's current street bet should become 40. The UI confirmation shows both the chips moved now and the target total. Bet and all-in commands move chip amounts directly.
+
+### Ended Sessions
+
+Ending a session finalizes stacks and locks future game, lobby, chip, settings, chat, and host-control commands. The final TXT/JSON export is idempotent for the connected host.
+
 ## Not Yet Supported
 
 Phase 2 variants are documented but not implemented: Omaha Hi-Lo, Big O, Short Deck, 5-card draw, 2-7 single/triple draw, Badugi, Razz, Stud, Stud Hi-Lo, HORSE, and full dealer's-choice mixed rotations.
