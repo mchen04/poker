@@ -6,6 +6,7 @@ export type HostActionPayload = {
   playerId?: string;
   value?: boolean;
 };
+export type HostActionResult = SocketResult<{ invalidatedSocketIds?: string[] }>;
 
 interface HostSupport {
   activeHand: (room: RoomInternal) => boolean;
@@ -13,7 +14,7 @@ interface HostSupport {
   requireHost: (room: RoomInternal, player: PlayerInternal) => { ok: false; error: string } | null;
 }
 
-export function hostActionWithSupport(support: HostSupport, room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): SocketResult {
+export function hostActionWithSupport(support: HostSupport, room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): HostActionResult {
   const hostError = support.requireHost(room, host);
   if (hostError) return hostError;
   if (payload.action === 'lock') {
@@ -52,6 +53,7 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     return { ok: true };
   }
   if (payload.action === 'kick' || payload.action === 'ban') {
+    const invalidatedSocketIds = [...target.socketIds];
     if (target.seat !== null) room.seats[target.seat] = null;
     target.seat = null;
     target.status = 'sitting_out';
@@ -61,7 +63,7 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     support.audit(room, payload.action === 'ban' ? 'host.ban' : 'host.kick', `${target.name} was ${payload.action === 'ban' ? 'banned' : 'kicked'}`, host.id, {
       targetId: target.id
     });
-    return { ok: true };
+    return { ok: true, invalidatedSocketIds };
   }
   return { ok: false, error: 'Unknown host action.' };
 }

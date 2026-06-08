@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { act, approveChips, createRoom, endSession, getRoom, hostAction, joinRoom, playerInRoom, queueMode, requestChips, sit, snapshot, startGame, updateSettings } from '../src/server/room';
 
@@ -66,6 +67,22 @@ describe('room command model', () => {
     expect([...hand.participants.values()].every((participant) => participant.currentBet === 0)).toBe(true);
     const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
     expect(snapshot(room, actor.id).privateState?.legalActions.canCheck).toBe(true);
+  });
+
+  it('reveals the committed shuffle preimage after hand completion', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const commitment = hand.shuffleCommitment;
+    const actor = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat)!;
+    expect(act(room, actor, { action: 'fold', nonce: hand.actionNonce }).ok).toBe(true);
+    const nextActor = [...room.players.values()].find((player) => player.seat === room.hand?.currentTurnSeat)!;
+    expect(act(room, nextActor, { action: 'fold', nonce: room.hand!.actionNonce }).ok).toBe(true);
+    expect(room.hand?.phase).toBe('complete');
+    const reveal = room.hand!.shuffleReveal!;
+    expect(createHash('sha256').update(reveal).digest('hex')).toBe(commitment);
+    expect(reveal.split(':')[1].split(',')).toHaveLength(52);
+    expect(players.length).toBeGreaterThan(0);
   });
 
   it('rejects PLO raises above the pot-limit maximum', () => {
@@ -164,5 +181,37 @@ describe('room command model', () => {
       const spectator = playerInRoom(room, spectatorJoin.playerId)!;
       expect(hostAction(room, host, { action: 'transferHost', playerId: spectator.id }).ok).toBe(false);
     }
+  });
+
+  it('charges 7-2 bounty only to players dealt into the hand', () => {
+    const { room, host, players } = setupThreePlayers();
+    const observerJoin = joinRoom(room.code, 'Observer');
+    expect(observerJoin.ok).toBe(true);
+    if (!observerJoin.ok) throw new Error('observer join failed');
+    const observer = playerInRoom(room, observerJoin.playerId)!;
+    observer.stack = 777;
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    const participants = [...hand.participants.values()];
+    participants[0].holeCards = ['7s', '2s'];
+    participants[1].holeCards = ['As', '3c'];
+    participants[2].holeCards = ['Qd', '4c'];
+    participants.forEach((participant) => {
+      participant.folded = false;
+      participant.currentBet = 0;
+      participant.committedThisHand = 10;
+      participant.acted = participant.seat !== participants[0].seat;
+    });
+    hand.board = ['7h', '2h', '7d', '2d', 'Ks'];
+    hand.phase = 'river';
+    hand.currentTurnSeat = participants[0].seat;
+    hand.currentBet = 0;
+    host.stack = 1000;
+    players[1].stack = 1000;
+    players[2].stack = 1000;
+    observer.stack = 777;
+    const actor = [...room.players.values()].find((player) => player.seat === participants[0].seat)!;
+    expect(act(room, actor, { action: 'check', nonce: hand.actionNonce }).ok).toBe(true);
+    expect(observer.stack).toBe(777);
   });
 });

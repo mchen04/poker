@@ -209,7 +209,26 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('hostAction', safeHandler(schemas.hostAction, (payload, ack) => {
-    withPlayer(socket.data.roomCode, socket.data.playerId, ack, (room, player) => hostAction(room, player, payload));
+    withPlayer(
+      socket.data.roomCode,
+      socket.data.playerId,
+      ack,
+      (room, player) => hostAction(room, player, payload),
+      true,
+      (result, room) => {
+        if (!result.ok || !('invalidatedSocketIds' in result) || !Array.isArray(result.invalidatedSocketIds)) return;
+        result.invalidatedSocketIds.forEach((socketId) => {
+          const kickedSocket = io.sockets.sockets.get(socketId);
+          kickedSocket?.emit('errorNotice', 'You were removed from this private room by the host.');
+          kickedSocket?.leave(room.code);
+          if (kickedSocket) {
+            kickedSocket.data.roomCode = undefined;
+            kickedSocket.data.playerId = undefined;
+            kickedSocket.disconnect(true);
+          }
+        });
+      }
+    );
   }));
 
   socket.on('chat', safeHandler(schemas.chat, (payload, ack) => {
@@ -231,7 +250,8 @@ function withPlayer<T extends SocketResult>(
   playerId: string | undefined,
   ack: (result: SocketResult<any>) => void,
   run: (room: NonNullable<ReturnType<typeof getRoom>>, player: NonNullable<ReturnType<typeof playerInRoom>>) => T,
-  shouldEmit = true
+  shouldEmit = true,
+  afterResult?: (result: T, room: NonNullable<ReturnType<typeof getRoom>>) => void
 ): void {
   if (!code || !playerId) {
     ack(fail('Join a room first.'));
@@ -249,6 +269,7 @@ function withPlayer<T extends SocketResult>(
   }
   const result = run(room, player);
   ack(result);
+  afterResult?.(result, room);
   if (shouldEmit || result.ok) emitRoom(code);
 }
 

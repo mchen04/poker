@@ -22,11 +22,11 @@ Each socket receives:
 - Public room state: seats, stacks, board, pot, audit, chat, settings, current turn.
 - Private player state: session token, own hole cards, and legal actions.
 
-Public state does not include hidden cards or deck order. Post-hand shuffle reveal information is only exposed after hand completion.
+Public state does not include hidden cards or deck order while a hand is active. After hand completion, the server reveals the shuffle seed plus the committed deck order so players can recompute the pre-hand commitment.
 
 ## Reconnect Model
 
-Rooms have no accounts. A browser session token restores a player's room identity, seat, and private hand state if it reconnects to the same in-memory room.
+Rooms have no accounts. A browser session token restores a player's room identity, seat, and private hand state if it reconnects to the same in-memory room. Host kick/ban invalidates the known room session token; without accounts or device fingerprinting, moderation is session-token based.
 
 If the server restarts, room state is lost.
 

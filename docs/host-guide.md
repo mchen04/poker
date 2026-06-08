@@ -11,7 +11,7 @@
 
 ## Settings
 
-The host can set blinds, buy-in, starting stack, min/max seats, action timer, self-service chips, straddle, custom queue, and 7-2 bounty. Active-hand setting changes are rejected and audit logged; change rules between hands.
+The host settings UI exposes blinds, buy-in, starting stack, minimum seats, self-service chips, straddle, custom queue, and 7-2 bounty. Active-hand setting changes are rejected and audit logged; change rules between hands.
 
 ## Chips and Ledger
 
@@ -27,7 +27,7 @@ The host can:
 - Toggle spectators.
 - Mute a player.
 - Force a player to sit out.
-- Kick a player.
+- Kick a player, which invalidates that room session token in the current in-memory room.
 - Transfer host ownership.
 
 All host actions append audit entries.

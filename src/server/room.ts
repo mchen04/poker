@@ -64,6 +64,7 @@ export interface ParticipantInternal {
 
 export interface HandInternal extends HandPublic {
   deck: Card[];
+  initialDeck: Card[];
   shuffleSeed: string;
   participants: Map<number, ParticipantInternal>;
 }
@@ -435,6 +436,7 @@ function buildHand(room: RoomInternal): SocketResult {
   const queued = room.queuedMode;
   const mode = mergeMode('holdem', queued);
   const { deck, seed, commitment } = shuffleDeck();
+  const initialDeck = [...deck];
   const participants = new Map<number, ParticipantInternal>();
   const holeCount = mode.variant === 'holdem' ? 2 : 4;
 
@@ -477,6 +479,7 @@ function buildHand(room: RoomInternal): SocketResult {
     winners: [],
     summary: '',
     deck,
+    initialDeck,
     shuffleSeed: seed,
     participants
   };
@@ -771,7 +774,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   hand.currentTurnSeat = null;
   hand.winners = [player.name];
   hand.summary = `${player.name} won ${total} without showdown.`;
-  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.deck.join(',')}`;
+  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
 }
@@ -818,7 +821,7 @@ function showdown(room: RoomInternal): void {
   hand.currentTurnSeat = null;
   hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
-  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.deck.join(',')}`;
+  hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   audit(room, 'showdown', hand.summary, undefined, { board: hand.board, board2: hand.board2 });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
 }
@@ -859,8 +862,10 @@ function applySevenTwoBounty(room: RoomInternal, live: ParticipantInternal[], aw
     if (!qualifies) return;
     const bounty = room.settings.sevenTwo.bounty + (suited ? room.settings.sevenTwo.suitedBonus : 0);
     let paidTotal = 0;
-    room.players.forEach((other) => {
-      if (other.id === player.id || other.spectator) return;
+    hand.participants.forEach((payer) => {
+      if (payer.playerId === player.id) return;
+      const other = room.players.get(payer.playerId);
+      if (!other) return;
       const paid = Math.min(other.stack, bounty);
       other.stack -= paid;
       player.stack += paid;
