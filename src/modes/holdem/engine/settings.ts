@@ -35,7 +35,8 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
       bounty: 25,
       suitedBonus: 25
     },
-    largeBetThresholdPct: 75
+    largeBetThresholdPct: 75,
+    actionTimerSeconds: 30
   };
 }
 
@@ -74,7 +75,8 @@ export function sanitizeSettings(current: RoomSettings, patch: RoomSettingsPatch
       bounty: clampInt(patch.sevenTwo?.bounty, 0, 1000000, current.sevenTwo.bounty),
       suitedBonus: clampInt(patch.sevenTwo?.suitedBonus, 0, 1000000, current.sevenTwo.suitedBonus)
     },
-    largeBetThresholdPct: clampInt(patch.largeBetThresholdPct, 1, 100, current.largeBetThresholdPct)
+    largeBetThresholdPct: clampInt(patch.largeBetThresholdPct, 1, 100, current.largeBetThresholdPct),
+    actionTimerSeconds: clampInt(patch.actionTimerSeconds, 0, 600, current.actionTimerSeconds)
   };
   next.bigBlind = Math.max(next.bigBlind, next.smallBlind);
   return next;

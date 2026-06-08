@@ -14,6 +14,7 @@ export function handToPublic(hand: HandInternal | null): HandPublic | null {
     bigBlindSeat: hand.bigBlindSeat,
     straddleSeat: hand.straddleSeat,
     currentTurnSeat: hand.currentTurnSeat,
+    turnStartedAt: hand.turnStartedAt,
     currentBet: hand.currentBet,
     minRaise: hand.minRaise,
     board: hand.board,

@@ -54,6 +54,8 @@ export interface RoomSettings {
     suitedBonus: number;
   };
   largeBetThresholdPct: number;
+  /** Per-turn action clock in seconds for connected players. 0 disables it. */
+  actionTimerSeconds: number;
 }
 
 export type RoomSettingsPatch = Partial<Omit<RoomSettings, 'straddle' | 'custom' | 'sevenTwo'>> & {
@@ -133,6 +135,8 @@ export interface HandPublic {
   bigBlindSeat: number | null;
   straddleSeat: number | null;
   currentTurnSeat: number | null;
+  /** Server clock (ms) when the current actor's turn began; null when no actor. Drives the action-timer countdown. */
+  turnStartedAt: number | null;
   currentBet: number;
   minRaise: number;
   board: Card[];
@@ -191,38 +195,38 @@ export type ServerSnapshot = {
   privateState: PrivateState | null;
 };
 
-export interface ClientToServerEvents {
-  createRoom: (
-    payload: { name: string; roomName?: string },
-    ack: (result: SocketResult<{ code: string; playerId: string; sessionToken: string }>) => void
-  ) => void;
-  joinRoom: (
-    payload: { code: string; name: string; sessionToken?: string; spectator?: boolean },
-    ack: (result: SocketResult<{ code: string; playerId: string; sessionToken: string }>) => void
-  ) => void;
-  updateSettings: (payload: RoomSettingsPatch, ack: (result: SocketResult) => void) => void;
-  sit: (payload: { seat: number }, ack: (result: SocketResult) => void) => void;
-  ready: (payload: { ready: boolean }, ack: (result: SocketResult) => void) => void;
-  startGame: (payload: Record<string, never>, ack: (result: SocketResult) => void) => void;
-  act: (
-    payload: { action: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in'; amount?: number; nonce: number },
-    ack: (result: SocketResult) => void
-  ) => void;
-  requestChips: (payload: { amount: number; reason?: string }, ack: (result: SocketResult) => void) => void;
-  approveChips: (payload: { playerId: string; amount: number; reason?: string }, ack: (result: SocketResult) => void) => void;
-  queueMode: (payload: { mode: CustomModeName }, ack: (result: SocketResult) => void) => void;
-  hostAction: (
-    payload: { action: 'kick' | 'ban' | 'mute' | 'forceSitOut' | 'transferHost' | 'lock' | 'spectators'; playerId?: string; value?: boolean },
-    ack: (result: SocketResult) => void
-  ) => void;
-  chat: (payload: { message: string }, ack: (result: SocketResult) => void) => void;
-  endSession: (payload: Record<string, never>, ack: (result: SocketResult<{ exportText: string; exportJson: string }>) => void) => void;
-}
+export type PlayerAction = 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in';
+export type HostActionName = 'kick' | 'ban' | 'mute' | 'forceSitOut' | 'transferHost' | 'lock' | 'spectators';
 
-export interface ServerToClientEvents {
-  snapshot: (snapshot: ServerSnapshot) => void;
-  errorNotice: (message: string) => void;
-}
+/**
+ * Client -> server messages over the PartyKit WebSocket. Each is JSON with a
+ * `type` discriminator; an optional `reqId` is echoed back on the matching
+ * `error`/`export` reply so the client can correlate a command's outcome.
+ */
+export type ClientCommand =
+  | { type: 'join'; name: string; sessionToken?: string; spectator?: boolean; reqId?: string }
+  | { type: 'updateSettings'; patch: RoomSettingsPatch; reqId?: string }
+  | { type: 'sit'; seat: number; reqId?: string }
+  | { type: 'ready'; ready: boolean; reqId?: string }
+  | { type: 'startGame'; reqId?: string }
+  | { type: 'act'; action: PlayerAction; amount?: number; nonce: number; reqId?: string }
+  | { type: 'requestChips'; amount: number; reason?: string; reqId?: string }
+  | { type: 'approveChips'; playerId: string; amount: number; reason?: string; reqId?: string }
+  | { type: 'queueMode'; mode: CustomModeName; reqId?: string }
+  | { type: 'hostAction'; action: HostActionName; playerId?: string; value?: boolean; reqId?: string }
+  | { type: 'chat'; message: string; reqId?: string }
+  | { type: 'addBot'; reqId?: string }
+  | { type: 'removeBot'; playerId: string; reqId?: string }
+  | { type: 'endSession'; reqId?: string }
+  | { type: 'leave'; reqId?: string };
+
+/** Server -> client messages over the PartyKit WebSocket. */
+export type ServerEvent =
+  | { type: 'snapshot'; publicState: RoomPublicState; privateState: PrivateState | null }
+  | { type: 'welcome'; playerId: string; sessionToken: string }
+  | { type: 'export'; exportText: string; exportJson: string; reqId?: string }
+  | { type: 'error'; message: string; reqId?: string }
+  | { type: 'kicked'; message: string };
 
 export type SocketResult<T = object> =
   | ({ ok: true } & T)

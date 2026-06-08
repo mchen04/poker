@@ -1,46 +1,65 @@
 /**
- * RoomStorage — versioned persistence helpers for DingServer. Centralizes the
- * storage keys and the migration entrypoint so the orchestrator doesn't deal
- * with raw blobs.
+ * RoomStorage — versioned persistence for the poker RoomInternal. The engine's
+ * room holds Maps/Sets (players, participants, bannedTokens), so we serialize
+ * to plain JSON-friendly shapes and reconstruct on load. Live socket ids are
+ * transient and never persisted — players come back disconnected and re-bind
+ * on reconnect.
  */
 
 import type * as Party from "partykit/server";
-import type { ServerGameState } from "../state";
-import type { BotMeta } from "../bots";
-import { migrateState, tagVersion } from "../state/migrate";
+import type { HandInternal, ParticipantInternal, PlayerInternal, RoomInternal } from "../../src/modes/holdem/engine/room";
 
-const STORAGE_KEY_STATE = "state";
+const STORAGE_KEY_ROOM = "pokerRoom";
 const STORAGE_KEY_BOT_META = "botMeta";
-const STORAGE_KEY_KICKED = "kickedPids";
+const SCHEMA_VERSION = 1;
+
+interface StoredRoom {
+  v: number;
+  room: Omit<RoomInternal, "players" | "bannedTokens" | "hand"> & {
+    players: Array<[string, Omit<PlayerInternal, "socketIds">]>;
+    bannedTokens: string[];
+    hand: (Omit<HandInternal, "participants"> & { participants: Array<[number, ParticipantInternal]> }) | null;
+  };
+}
 
 export class RoomStorage {
   constructor(private room: Party.Room) {}
 
-  async loadState(): Promise<ServerGameState | null> {
-    const raw = await this.room.storage.get<unknown>(STORAGE_KEY_STATE);
-    if (!raw) return null;
-    return migrateState(raw);
+  async loadRoom(): Promise<RoomInternal | null> {
+    const raw = await this.room.storage.get<StoredRoom>(STORAGE_KEY_ROOM);
+    if (!raw || raw.v !== SCHEMA_VERSION) return null;
+    const stored = raw.room;
+    const players = new Map<string, PlayerInternal>(
+      stored.players.map(([id, player]) => [id, { ...player, socketIds: new Set<string>() }])
+    );
+    const hand: HandInternal | null = stored.hand
+      ? { ...stored.hand, participants: new Map<number, ParticipantInternal>(stored.hand.participants.map(([seat, part]) => [Number(seat), part])) }
+      : null;
+    return { ...stored, players, bannedTokens: new Set(stored.bannedTokens), hand };
   }
 
-  async loadBotMeta(): Promise<Record<string, BotMeta>> {
-    const meta = await this.room.storage.get<Record<string, BotMeta>>(STORAGE_KEY_BOT_META);
-    return meta ?? {};
+  async saveRoom(room: RoomInternal): Promise<void> {
+    const stored: StoredRoom = {
+      v: SCHEMA_VERSION,
+      room: {
+        ...room,
+        players: [...room.players.entries()].map(([id, player]) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { socketIds, ...rest } = player;
+          return [id, rest];
+        }),
+        bannedTokens: [...room.bannedTokens],
+        hand: room.hand ? { ...room.hand, participants: [...room.hand.participants.entries()] } : null
+      }
+    };
+    await this.room.storage.put(STORAGE_KEY_ROOM, stored);
   }
 
-  async loadKicked(): Promise<Set<string>> {
-    const kicked = await this.room.storage.get<string[]>(STORAGE_KEY_KICKED);
-    return new Set(kicked ?? []);
+  async loadBotMeta(): Promise<Record<string, unknown>> {
+    return (await this.room.storage.get<Record<string, unknown>>(STORAGE_KEY_BOT_META)) ?? {};
   }
 
-  async saveState(state: ServerGameState): Promise<void> {
-    await this.room.storage.put(STORAGE_KEY_STATE, tagVersion(state));
-  }
-
-  async saveBotMeta(meta: Record<string, BotMeta>): Promise<void> {
+  async saveBotMeta(meta: Record<string, unknown>): Promise<void> {
     await this.room.storage.put(STORAGE_KEY_BOT_META, meta);
-  }
-
-  async saveKicked(kicked: Set<string>): Promise<void> {
-    await this.room.storage.put(STORAGE_KEY_KICKED, Array.from(kicked));
   }
 }

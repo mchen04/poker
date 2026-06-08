@@ -4,7 +4,7 @@ import { buildQueuedMode, mergeMode, modeLabel, validateMode } from '../shared/m
 import { cleanChat, cleanName, clampInt } from '../shared/sanitize';
 import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic, LegalActions, PlayerPublic, PrivateState, QueuedCustomMode, RoomPublicState, RoomSettings, RoomSettingsPatch, ServerSnapshot, SocketResult, Variant } from '../shared/types';
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
-import { hostActionWithSupport, type HostActionPayload } from './hostControls';
+import { hostActionWithSupport, type HostActionPayload, type HostActionResult } from './hostControls';
 import { handToPublic } from './projection';
 import { eligiblePlayers, hasActiveHand, rateLimited, readyEligiblePlayers, reconcileHandParticipants, reconcileStackStatus, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant, requireReadyParticipant } from './access';
 import { shuffleDeck } from './deck';
@@ -481,6 +481,7 @@ function buildHand(room: RoomInternal): SocketResult {
     bigBlindSeat: mode.modifiers.bombPot ? null : bigBlindSeat,
     straddleSeat: mode.modifiers.bombPot ? null : straddleSeat,
     currentTurnSeat: null,
+    turnStartedAt: null,
     currentBet: 0,
     minRaise: room.settings.bigBlind,
     fullRaiseBase: 0,
@@ -535,7 +536,7 @@ function buildHand(room: RoomInternal): SocketResult {
     audit(room, 'modifier.applied', `Bomb pot posted ${Math.max(room.settings.bigBlind, room.settings.ante)} from each player and skipped preflop betting.`);
   }
 
-  hand.currentTurnSeat = firstActionSeat(room, hand);
+  assignTurn(hand, firstActionSeat(room, hand));
   updatePots(hand);
   if (hand.currentTurnSeat === null) maybeAutoAdvanceOrAward(room);
   return { ok: true };
@@ -552,6 +553,40 @@ export function startGame(room: RoomInternal, player: PlayerInternal): SocketRes
   if (hostError) return hostError;
   if (room.hand && room.hand.phase !== 'complete') return { ok: false, error: 'Finish the active hand before starting another.' };
   return buildHand(room);
+}
+
+/** Assign the acting seat and stamp the turn-clock start (null when no actor). */
+function assignTurn(hand: HandInternal, seat: number | null): void {
+  hand.currentTurnSeat = seat;
+  hand.turnStartedAt = seat === null ? null : Date.now();
+}
+
+/**
+ * Auto-act the seat currently on the clock (connected or not) — used by the
+ * action-timer alarm. Checks if free, otherwise folds. Mirrors the
+ * disconnect timeout but applies to whoever is to act when the clock expires.
+ */
+export function timeoutCurrentActor(room: RoomInternal): boolean {
+  const hand = room.hand;
+  if (!hand || hand.phase === 'complete' || hand.currentTurnSeat === null) return false;
+  const seat = hand.currentTurnSeat;
+  const player = [...room.players.values()].find((entry) => entry.seat === seat);
+  if (!player) return false;
+  const participant = hand.participants.get(seat);
+  if (!participant || participant.folded || participant.allIn) return false;
+  if (legalActionsFor(room, player).canCheck) {
+    participant.acted = true;
+    audit(room, 'timeout.check', `${player.name} timed out and checked`, player.id);
+  } else {
+    participant.folded = true;
+    participant.acted = true;
+    participant.timedOut = true;
+    audit(room, 'timeout.fold', `${player.name} timed out and folded`, player.id);
+  }
+  hand.actionNonce += 1;
+  updatePots(hand);
+  maybeAutoAdvanceOrAward(room);
+  return true;
 }
 
 function firstActionSeat(room: RoomInternal, hand: HandInternal): number | null {
@@ -725,7 +760,7 @@ function maybeAutoAdvanceOrAward(room: RoomInternal): void {
     active.length === 0 ||
     active.every((entry) => entry.acted && entry.currentBet === hand.currentBet);
   if (!bettingComplete) {
-    hand.currentTurnSeat = nextActiveSeat(room, hand, hand.currentTurnSeat);
+    assignTurn(hand, nextActiveSeat(room, hand, hand.currentTurnSeat));
     resolveDisconnectedTurns(room);
     return;
   }
@@ -762,7 +797,7 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
     entry.acted = entry.folded || entry.allIn;
   });
   dealStreet(hand, phase);
-  hand.currentTurnSeat = firstActionSeat(room, hand);
+  assignTurn(hand, firstActionSeat(room, hand));
   resolveDisconnectedTurns(room);
   audit(room, `street.${phase}`, `${phase[0].toUpperCase()}${phase.slice(1)} dealt`, undefined, {
     board: hand.board,
@@ -789,7 +824,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   const awards = [`${player.name} won ${total} without showdown.`];
   if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
   hand.phase = 'complete';
-  hand.currentTurnSeat = null;
+  assignTurn(hand, null);
   hand.winners = awards;
   hand.summary = awards.join(' · ');
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
@@ -828,7 +863,7 @@ function showdown(room: RoomInternal): void {
   }
 
   hand.phase = 'complete';
-  hand.currentTurnSeat = null;
+  assignTurn(hand, null);
   hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
@@ -927,7 +962,7 @@ export function queueMode(room: RoomInternal, player: PlayerInternal, mode: Cust
   return { ok: true };
 }
 
-export function hostAction(room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): SocketResult {
+export function hostAction(room: RoomInternal, host: PlayerInternal, payload: HostActionPayload): HostActionResult {
   const lifecycleError = requireMutableRoom(room);
   if (lifecycleError) return lifecycleError;
   return hostActionWithSupport(hostSupport, room, host, payload);

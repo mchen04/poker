@@ -1,11 +1,9 @@
 /**
- * ConnectionManager — owns the live WebSocket map and lookups by both
- * connection id and player id. Extracted from DingServer so the orchestrator
- * doesn't have to thread `connections` everywhere.
+ * ConnectionManager — owns the live WebSocket map. The poker server keeps a
+ * separate connection-id -> playerId binding, so this stays a thin Map wrapper.
  */
 
 import type * as Party from "partykit/server";
-import type { Player } from "../../src/lib/types";
 
 export class ConnectionManager {
   private connections: Map<string, Party.Connection> = new Map();
@@ -23,13 +21,8 @@ export class ConnectionManager {
     return this.connections.size;
   }
 
-  /** Get the underlying Map (for compatibility with broadcast helpers that take it directly). */
-  raw(): Map<string, Party.Connection> {
-    return this.connections;
-  }
-
-  /** Find the player matching a given connection. */
-  playerByConn(players: Player[], connId: string): Player | undefined {
-    return players.find((p) => p.connId === connId);
+  /** Iterate the live connections. */
+  values(): IterableIterator<Party.Connection> {
+    return this.connections.values();
   }
 }

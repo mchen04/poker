@@ -1,46 +1,42 @@
 /**
- * AlarmScheduler — computes when the DO alarm should next fire. Considers:
+ * AlarmScheduler — computes when the DO alarm should next fire for a poker
+ * room. Two candidates:
  *
- *   1. round-timer expiry (if set and we're in a play phase),
- *   2. lobby-ghost grace expiry (if any disconnected lobby players are waiting).
+ *   1. action-clock expiry (turnStartedAt + actionTimerSeconds) for the seat
+ *      currently to act, and
+ *   2. empty-room cleanup grace (emptySince + EMPTY_ROOM_GRACE_MS).
  *
- * If nothing pending, deletes the alarm entirely so the DO can hibernate.
+ * If neither applies, the alarm is deleted so the DO can hibernate.
  */
 
 import type * as Party from "partykit/server";
-import type { ServerGameState } from "../state";
-import { LOBBY_GRACE_MS } from "../../src/lib/constants";
+import type { RoomInternal } from "../../src/modes/holdem/engine/room";
+
+export const EMPTY_ROOM_GRACE_MS = 60 * 60 * 1000;
 
 export class AlarmScheduler {
-  /**
-   * Track the last computed alarm timestamp so we don't issue redundant
-   * `setAlarm` storage writes when the target hasn't changed.
-   */
   private lastTarget: number | null = null;
 
   constructor(private room: Party.Room) {}
 
-  async schedule(state: ServerGameState): Promise<void> {
+  async schedule(room: RoomInternal, autoStartAt: number | null = null): Promise<void> {
     const candidates: number[] = [];
-    const { phase, phaseStartedAt, roundTimerSeconds } = state;
+    const hand = room.hand;
     if (
-      phaseStartedAt !== null &&
-      roundTimerSeconds > 0 &&
-      phase !== "lobby" &&
-      phase !== "reveal"
+      room.lifecycle === "playing" &&
+      hand &&
+      hand.phase !== "complete" &&
+      hand.currentTurnSeat !== null &&
+      hand.turnStartedAt !== null &&
+      room.settings.actionTimerSeconds > 0
     ) {
-      candidates.push(phaseStartedAt + roundTimerSeconds * 1000);
+      candidates.push(hand.turnStartedAt + room.settings.actionTimerSeconds * 1000);
     }
-    if (phase === "lobby") {
-      for (const p of state.players) {
-        if (
-          !p.connected &&
-          p.disconnectedAt !== null &&
-          p.disconnectedAt !== undefined
-        ) {
-          candidates.push(p.disconnectedAt + LOBBY_GRACE_MS);
-        }
-      }
+    if (autoStartAt !== null) {
+      candidates.push(autoStartAt);
+    }
+    if (room.emptySince !== null) {
+      candidates.push(room.emptySince + EMPTY_ROOM_GRACE_MS);
     }
     try {
       if (candidates.length === 0) {
@@ -51,17 +47,16 @@ export class AlarmScheduler {
         return;
       }
       const next = Math.max(Date.now() + 100, Math.min(...candidates));
-      // Dirty-bit gate: skip the storage write if the target is unchanged.
       if (this.lastTarget === next) return;
       await this.room.storage.setAlarm(next);
       this.lastTarget = next;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("[ding] AlarmScheduler.schedule failed", err);
+      console.error("[poker] AlarmScheduler.schedule failed", err);
     }
   }
 
-  /** Force-refresh on next call; use when state was replaced (playAgain). */
+  /** Force-refresh on next call; use when state was replaced. */
   invalidate(): void {
     this.lastTarget = null;
   }
