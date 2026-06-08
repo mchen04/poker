@@ -147,9 +147,7 @@ export interface HandPublic {
   board: Card[];
   pots: PotPublic[];
   eligibleSeatNumbers: number[];
-  lastAggressorSeat: number | null;
   actionNonce: number;
-  winners: string[];
   summary: string;
   /** Seats that won any pot this hand (for UI highlight). */
   winningSeats: number[];

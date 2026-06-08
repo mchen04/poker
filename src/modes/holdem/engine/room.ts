@@ -45,7 +45,6 @@ export interface ParticipantInternal {
   folded: boolean;
   allIn: boolean;
   acted: boolean;
-  timedOut: boolean;
 }
 
 export interface HandInternal extends HandPublic {
@@ -331,7 +330,6 @@ function timeoutDisconnectedParticipant(room: RoomInternal, player: PlayerIntern
   } else {
     participant.folded = true;
     participant.acted = true;
-    participant.timedOut = true;
     audit(room, 'timeout.fold', `${player.name} disconnected and timed out to fold`, player.id);
   }
   hand.actionNonce += 1;
@@ -470,8 +468,7 @@ function buildHand(room: RoomInternal): SocketResult {
       committedThisHand: 0,
       folded: false,
       allIn: false,
-      acted: false,
-      timedOut: false
+      acted: false
     });
   });
 
@@ -493,9 +490,7 @@ function buildHand(room: RoomInternal): SocketResult {
     board: [],
     pots: [],
     eligibleSeatNumbers: [...participants.keys()],
-    lastAggressorSeat: null,
     actionNonce: 1,
-    winners: [],
     summary: '',
     winningSeats: [],
     revealedHands: [],
@@ -587,7 +582,6 @@ export function timeoutCurrentActor(room: RoomInternal): boolean {
   } else {
     participant.folded = true;
     participant.acted = true;
-    participant.timedOut = true;
     audit(room, 'timeout.fold', `${player.name} timed out and folded`, player.id);
   }
   hand.actionNonce += 1;
@@ -737,7 +731,6 @@ function applyWagerState(hand: HandInternal, participant: ParticipantInternal, f
   hand.fullRaiseBase = participant.currentBet;
   hand.minRaise = fullRaise;
   if (resetActors) {
-    hand.lastAggressorSeat = participant.seat;
     hand.participants.forEach((entry) => {
       if (entry.seat !== participant.seat && !entry.folded && !entry.allIn) entry.acted = false;
     });
@@ -798,7 +791,6 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
   hand.currentBet = 0;
   hand.minRaise = room.settings.bigBlind;
   hand.fullRaiseBase = 0;
-  hand.lastAggressorSeat = null;
   hand.participants.forEach((entry) => {
     entry.currentBet = 0;
     entry.acted = entry.folded || entry.allIn;
@@ -831,7 +823,6 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   hand.phase = 'complete';
   assignTurn(hand, null);
   hand.winningSeats = [winner.seat];
-  hand.winners = awards;
   hand.summary = awards.join(' · ');
   reconcileHandParticipants(room, hand);
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
@@ -881,7 +872,6 @@ function showdown(room: RoomInternal): void {
   hand.phase = 'complete';
   assignTurn(hand, null);
   hand.winningSeats = [...winningSeats];
-  hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
   reconcileHandParticipants(room, hand);
   audit(room, 'showdown', hand.summary, undefined, { board: hand.board });

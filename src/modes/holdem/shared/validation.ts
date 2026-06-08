@@ -1,8 +1,7 @@
 /**
- * Authoritative input validation for client commands (ported from Feltline's
- * socket.io Zod schemas, re-homed onto the PartyKit message protocol). Every
- * inbound message is parsed here before reaching the engine; malformed or
- * unknown-key payloads are rejected.
+ * Authoritative input validation for client commands on the PartyKit message
+ * protocol. Every inbound message is parsed here before reaching the engine;
+ * malformed or unknown-key payloads are rejected.
  */
 import { z } from 'zod';
 import type { ClientCommand } from './types';

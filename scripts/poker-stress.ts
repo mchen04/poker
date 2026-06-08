@@ -1,5 +1,5 @@
 /**
- * Engine stress harness — drives the ported Hold'em engine directly (no
+ * Engine stress harness — drives the Hold'em engine directly (no
  * transport) for N full hands, asserting chip conservation, legal-action
  * acceptance, stale-nonce rejection, and zero private-card leaks onto the
  * public board. Run with: `npm run stress` (HANDS=1000 by default).

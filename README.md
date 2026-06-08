@@ -14,15 +14,17 @@ server-authoritative NL Hold'em engine.
 - **Lobby**: seat selection, ready status, stacks, buy-ins, up/down, host badge,
   and an append-only audit log. Host configures blinds, ante, buy-in, starting
   stack, min/max seats, straddle, the per-turn action timer, the global 7-2
-  bounty, and custom-mode rules.
+  bounty, custom-mode rules, chip mode (strict defers chip changes mid-hand /
+  casual), self-service vs. host-approved chips, spectators, and room lock.
 - **Table**: fold / check / call / bet / raise / all-in, a community board
   (flop/turn/river), and a pot display with **main pot + side pots**. Seat
   panels show name, stack, current bet, dealer/blind/straddle badges, and
   up/down since buy-in.
-- **Betting control** (net-new): type an exact amount, drag a slider, or tap
-  presets (⅓, ½, ⅔, pot, ×BB, min, max, all-in). The server validates min-raise,
-  all-in, and insufficient-stack; an illegal amount can never be committed.
-  Hotkeys: `F` fold · `C` check/call · `B`/`R` bet/raise · `A` all-in.
+- **Betting control**: type an exact amount, drag a slider, or tap presets
+  (min, ⅓, ½, ⅔, pot, 3×BB, max), with dedicated Call / All-in buttons. The
+  server validates min-raise, all-in, and insufficient-stack; an illegal amount
+  can never be committed. Hotkeys: `F` fold · `C` check/call · `B`/`R` bet/raise
+  · `A` all-in.
 - **Continuous play**: a brief winner/pot-award at showdown (contesting hands
   revealed), then the next hand auto-deals. The table persists across hands; the
   button/blinds advance.
@@ -31,7 +33,15 @@ server-authoritative NL Hold'em engine.
   setting (below), not a queued one-hand mode.
 - **7-2 bounty** (global host setting): any player who wins a pot holding a 7 and
   a 2 collects the configured bounty from every other player, automatically,
-  every hand while enabled (with an optional suited bonus).
+  every hand while enabled (with an optional suited bonus, and an optional "pay
+  only at showdown" requirement). The win reveals only the qualifying 7 + 2 —
+  never the rest of a mucked hand.
+- **Chip management**: players request a rebuy (self-service or host-approved per
+  the room's chip mode); the host can add or remove chips for any player with a
+  reason. Every change is recorded in the append-only audit log.
+- **Host moderation**: mute, sit-out, kick (rejoinable) or ban (token-blocked) a
+  player, and transfer the host badge — which auto-reassigns to a connected human
+  if the host drops.
 - **Server-authoritative, no database**: the server owns the deck, turn order,
   stacks, pots, eligibility, and hand resolution; each client receives only the
   cards it may see; reconnect restores seat + private cards on the matching

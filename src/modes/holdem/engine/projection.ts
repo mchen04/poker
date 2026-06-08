@@ -20,9 +20,7 @@ export function handToPublic(hand: HandInternal | null): HandPublic | null {
     board: hand.board,
     pots: hand.pots,
     eligibleSeatNumbers: hand.eligibleSeatNumbers,
-    lastAggressorSeat: hand.lastAggressorSeat,
     actionNonce: hand.actionNonce,
-    winners: hand.winners,
     summary: hand.summary,
     winningSeats: hand.winningSeats,
     revealedHands: hand.revealedHands
