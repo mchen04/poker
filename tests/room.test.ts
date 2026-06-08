@@ -252,6 +252,8 @@ describe('room command model', () => {
 
   it('makes ended sessions read-only and keeps the export idempotent', () => {
     const { room, host, players } = setupThreePlayers();
+    host.socketIds.clear();
+    host.socketIds.add(`ended-${room.code}`);
     const ended = endSession(room, host);
     expect(ended.ok).toBe(true);
     if (!ended.ok) throw new Error('end session failed');
@@ -268,6 +270,12 @@ describe('room command model', () => {
     expect(hostAction(room, host, { action: 'lock', value: true }).ok).toBe(false);
     expect(addChat(room, players[1], 'after end').ok).toBe(false);
     expect(players[1].stack).toBe(stack);
+    expect(room.audit).toHaveLength(auditCount);
+    const hostStatus = host.status;
+    const hostSocket = [...host.socketIds][0];
+    expect(detachSocket(hostSocket)).toEqual([]);
+    expect(host.status).toBe(hostStatus);
+    expect(room.emptySince).toBeNull();
     expect(room.audit).toHaveLength(auditCount);
     const again = endSession(room, host);
     expect(again.ok).toBe(true);
@@ -319,6 +327,14 @@ describe('room command model', () => {
     players[2].socketIds.clear();
     players[2].status = 'disconnected';
     expect(hostAction(room, host, { action: 'transferHost', playerId: players[2].id }).ok).toBe(false);
+  });
+
+  it('marks zero-stack chip edit targets busted and blocks host transfer to them', () => {
+    const { room, host, players } = setupThreePlayers();
+    expect(approveChips(room, host, players[1].id, -1000, 'felted').ok).toBe(true);
+    expect(players[1].stack).toBe(0);
+    expect(players[1].status).toBe('busted');
+    expect(hostAction(room, host, { action: 'transferHost', playerId: players[1].id }).ok).toBe(false);
   });
 
   it('rejects custom queues from spectators and forced sit-out players', () => {

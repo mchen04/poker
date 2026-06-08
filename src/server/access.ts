@@ -1,4 +1,4 @@
-import type { PlayerInternal, RoomInternal } from './room';
+import type { HandInternal, PlayerInternal, RoomInternal } from './room';
 
 type AccessError = { ok: false; error: string };
 
@@ -23,13 +23,47 @@ export function requireHost(room: RoomInternal, player: PlayerInternal): AccessE
   return null;
 }
 
-export function requireQueueParticipant(player: PlayerInternal): AccessError | null {
+export function isConnectedSeatedPlayerWithChips(player: PlayerInternal): boolean {
+  return !player.banned && !player.spectator && player.seat !== null && player.socketIds.size > 0 && player.status === 'seated' && player.stack > 0 && !player.forcedSitOut;
+}
+
+export function eligiblePlayers(room: RoomInternal): PlayerInternal[] {
+  return room.seats
+    .map((id) => (id ? room.players.get(id) : null))
+    .filter((player): player is PlayerInternal => Boolean(player && isConnectedSeatedPlayerWithChips(player)));
+}
+
+export function requireConnectedSeatedPlayerWithChips(player: PlayerInternal, error: string): AccessError | null {
   const accessError = requireActivePlayer(player);
   if (accessError) return accessError;
-  if (player.spectator || player.seat === null || player.socketIds.size === 0 || player.status !== 'seated' || player.stack <= 0 || player.forcedSitOut) {
-    return { ok: false, error: 'Only connected seated players with chips can queue a custom hand.' };
-  }
+  if (!isConnectedSeatedPlayerWithChips(player)) return { ok: false, error };
   return null;
+}
+
+export function requireQueueParticipant(player: PlayerInternal): AccessError | null {
+  return requireConnectedSeatedPlayerWithChips(player, 'Only connected seated players with chips can queue a custom hand.');
+}
+
+export function requireHostTransferTarget(player: PlayerInternal): AccessError | null {
+  return requireConnectedSeatedPlayerWithChips(player, 'Host can only transfer to a connected seated player with chips.');
+}
+
+export function reconcileStackStatus(player: PlayerInternal): void {
+  if (player.spectator) return;
+  if (player.stack <= 0) {
+    player.stack = 0;
+    player.ready = false;
+    player.status = 'busted';
+  } else if (player.status === 'busted' && !player.forcedSitOut) {
+    player.status = player.seat === null ? 'sitting_out' : 'seated';
+  }
+}
+
+export function reconcileHandParticipants(room: RoomInternal, hand: HandInternal): void {
+  hand.participants.forEach((participant) => {
+    const player = room.players.get(participant.playerId);
+    if (player) reconcileStackStatus(player);
+  });
 }
 
 export function rateLimited(timestamps: number[], limit: number, windowMs: number): boolean {

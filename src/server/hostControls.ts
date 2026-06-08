@@ -1,4 +1,5 @@
 import type { SocketResult } from '../shared/types';
+import { requireHostTransferTarget } from './access';
 import type { PlayerInternal, RoomInternal } from './room';
 
 export type HostActionPayload = {
@@ -35,9 +36,8 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     return { ok: false, error: 'Finish the active hand before changing seats, sit-out state, or host ownership.' };
   }
   if (payload.action === 'transferHost') {
-    if (target.banned || target.spectator || target.seat === null || target.status !== 'seated' || target.socketIds.size === 0) {
-      return { ok: false, error: 'Host can only transfer to a connected seated player.' };
-    }
+    const transferError = requireHostTransferTarget(target);
+    if (transferError) return transferError;
     host.isHost = false;
     target.isHost = true;
     room.hostId = target.id;

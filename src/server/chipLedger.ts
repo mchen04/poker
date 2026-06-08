@@ -1,5 +1,6 @@
 import { cleanChat, clampInt } from '../shared/sanitize';
 import type { SocketResult } from '../shared/types';
+import { reconcileStackStatus } from './access';
 import type { PlayerInternal, RoomInternal } from './room';
 
 interface ChipSupport {
@@ -66,7 +67,7 @@ function addChips(support: ChipSupport, room: RoomInternal, target: PlayerIntern
   const applied = amount < 0 ? -Math.min(target.stack, Math.abs(amount)) : amount;
   target.stack += applied;
   if (applied > 0) target.buyInTotal += applied;
-  if (target.stack > 0 && target.status === 'busted' && !target.forcedSitOut) target.status = 'seated';
+  reconcileStackStatus(target);
   support.audit(room, applied >= 0 ? 'chips.added' : 'chips.removed', `${target.name} ${applied >= 0 ? 'received' : 'lost'} ${Math.abs(applied)} chips: ${reason}`, actorId, {
     targetId: target.id,
     amount: applied,

@@ -6,7 +6,7 @@ import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload } from './hostControls';
 import { handToPublic } from './projection';
-import { hasActiveHand, rateLimited, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant } from './access';
+import { eligiblePlayers, hasActiveHand, rateLimited, reconcileHandParticipants, reconcileStackStatus, requireActivePlayer, requireHost, requireMutableRoom, requireQueueParticipant } from './access';
 import { shuffleDeck } from './deck';
 import { buildSidePots, rankPlayers, winnerSeats } from './evaluator';
 import { makeCode } from './roomCode';
@@ -295,14 +295,15 @@ export function detachSocket(socketId: string): RoomInternal[] {
   rooms.forEach((room) => {
     room.players.forEach((player) => {
       if (player.socketIds.delete(socketId)) {
-        if (player.socketIds.size === 0) {
+        if (room.lifecycle !== 'ended' && player.socketIds.size === 0) {
           player.status = player.forcedSitOut ? 'sitting_out' : player.seat === null ? player.status : 'disconnected';
           audit(room, 'player.disconnected', `${player.name} disconnected`, player.id);
           timeoutDisconnectedParticipant(room, player);
         }
-        changed.push(room);
+        if (room.lifecycle !== 'ended') changed.push(room);
       }
     });
+    if (room.lifecycle === 'ended') return;
     if ([...room.players.values()].every((player) => player.socketIds.size === 0)) {
       room.emptySince ??= Date.now();
       audit(room, 'room.empty', 'All browsers disconnected. Room remains only while the server process is alive.');
@@ -413,14 +414,6 @@ export function setReady(room: RoomInternal, player: PlayerInternal, ready: bool
   return { ok: true };
 }
 
-function eligiblePlayers(room: RoomInternal): PlayerInternal[] {
-  return room.seats
-    .map((id) => (id ? room.players.get(id) : null))
-    .filter((player): player is PlayerInternal =>
-      Boolean(player && !player.spectator && player.stack > 0 && player.socketIds.size > 0 && player.status === 'seated')
-    );
-}
-
 function nextOccupiedSeat(room: RoomInternal, after: number | null, players = eligiblePlayers(room)): number | null {
   if (players.length === 0) return null;
   const occupied = new Set(players.map((player) => player.seat).filter((seat): seat is number => seat !== null));
@@ -440,6 +433,7 @@ function postBlind(room: RoomInternal, hand: HandInternal, seat: number | null, 
   if (!player) return;
   const paid = Math.min(player.stack, amount);
   player.stack -= paid;
+  reconcileStackStatus(player);
   participant.currentBet += paid;
   participant.committedThisHand += paid;
   if (player.stack === 0) participant.allIn = true;
@@ -539,6 +533,7 @@ function buildHand(room: RoomInternal): SocketResult {
       if (!player) return;
       const ante = Math.min(player.stack, Math.max(room.settings.bigBlind, room.settings.ante));
       player.stack -= ante;
+      reconcileStackStatus(player);
       participant.committedThisHand += ante;
       if (player.stack === 0) participant.allIn = true;
     });
@@ -709,6 +704,7 @@ export function act(
 function moveChips(player: PlayerInternal, participant: ParticipantInternal, amount: number): void {
   const paid = Math.min(player.stack, Math.max(0, amount));
   player.stack -= paid;
+  reconcileStackStatus(player);
   participant.currentBet += paid;
   participant.committedThisHand += paid;
   if (player.stack === 0) participant.allIn = true;
@@ -812,6 +808,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   hand.winners = [player.name];
   hand.summary = `${player.name} won ${total} without showdown.`;
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
+  reconcileHandParticipants(room, hand);
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
 }
@@ -859,6 +856,7 @@ function showdown(room: RoomInternal): void {
   hand.winners = awards;
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
+  reconcileHandParticipants(room, hand);
   audit(room, 'showdown', hand.summary, undefined, { board: hand.board, board2: hand.board2 });
   audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
 }
