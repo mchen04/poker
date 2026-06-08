@@ -26,3 +26,12 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 17 | BLOCK | 0/2/0 | 1 | +17 | pass | fixed live straddle min-raise and PLO all-in target-cap validation |
 | 18 | BLOCK | 0/3/0 | 1 | +42 | pass | split full-raise base from current bet and removed unsupported variant label fallback |
 | 19 | APPROVE | 0/0/0 | 0 | +0 | pass | first clean fresh-context audit |
+| 20 | APPROVE | 0/0/0 | 0 | +0 | pass | converged with second consecutive clean fresh-context audit |
+
+## Summary
+
+- Exit reason: converged after 2 consecutive APPROVE verdicts.
+- Total cycles: 20 including baseline and approval-only log cycles.
+- Total implementation commits: 18 fix commits plus baseline/log commits.
+- Final automated gates: typecheck, unit tests, 1000-hand stress, and build passing.
+- Structural note: `src/server/room.ts` ended at 979 lines, below the 1000-line hard gate.
