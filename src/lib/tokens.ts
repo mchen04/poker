@@ -60,51 +60,14 @@ export const overlays = {
  * pixel means, not what color it happens to be.
  */
 export const surfaces = {
-  goldPanel: "rgba(201,165,74,0.08)",
-  accentLight: "rgba(47,184,115,0.18)",
-  dangerLight: "rgba(240,138,108,0.18)",
-  disabledBg: "rgba(0,0,0,0.22)",
-  subtleBorder: "rgba(255,255,255,0.08)",
-  neutralFaint: "rgba(255,255,255,0.06)",
-  goldMid: "rgba(201,165,74,0.2)",
+  /** Hairline divider between sections. */
   dividerLine: "rgba(255,255,255,0.1)",
-  panelDeep: "rgba(0,0,0,0.28)",
-  disabledOverlay: "rgba(255,255,255,0.04)",
-  faintFill: "rgba(255,255,255,0.05)",
+  /** Translucent fill for neutral tag/pill backgrounds. */
   tagBg: "rgba(255,255,255,0.07)",
-  dimmed: "rgba(255,255,255,0.2)",
-  goldLight: "rgba(201,165,74,0.18)",
-  goldEmphasis: "rgba(201,165,74,0.55)",
-  whiteBorder: "rgba(255,255,255,0.15)",
-  goldFaint: "rgba(201,165,74,0.15)",
-  accentBorder: "rgba(47,184,115,0.35)",
-  panelOverlay: "rgba(10,30,18,0.6)",
-  // Translucent dark background for icon-button overlays sitting on the felt.
-  darkIconBg: "rgba(0,0,0,0.35)",
-
-  // Accent (green) variants used for selected/correct/winner state. Note
-  // accentLight (0.18) and accentBorder (0.35) already cover the common range;
-  // these fill in the gaps below/above.
-  accentFaint: "rgba(47,184,115,0.10)",
-  accentSoft: "rgba(47,184,115,0.14)",
-  accentGlow: "rgba(47,184,115,0.5)",
-  accentStrong: "rgba(47,184,115,0.6)",
-
-  // Danger-urgent (red) palette for round/game timers approaching expiry.
-  dangerUrgentBg: "rgba(192,96,96,0.25)",
-  dangerUrgentBorder: "rgba(192,96,96,0.5)",
-  dangerUrgentBgFaint: "rgba(192,96,96,0.15)",
-  dangerUrgentBorderFaint: "rgba(192,96,96,0.35)",
-
-  // Warning (matches colors.warning #f08a6c) — opt-in penalty surface.
-  warningBg: "rgba(240,138,108,0.22)",
-  warningBorder: "rgba(240,138,108,0.32)",
 } as const;
 
-/** Shadow / scrim rgba fragments — composable inside boxShadow/textShadow
- *  expressions, or used as standalone dark fills for modal backdrops. */
+/** Shadow scrim fragments composable inside boxShadow/textShadow expressions. */
 export const shades = {
-  shadowSoft: "rgba(0,0,0,0.3)",
   shadowMedium: "rgba(0,0,0,0.5)",
 } as const;
 

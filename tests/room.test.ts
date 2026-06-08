@@ -38,7 +38,7 @@ describe('room command model', () => {
     expect(hostPrivate.holeCards).toHaveLength(2);
     expect(otherPrivate.holeCards).toHaveLength(2);
     expect(hostPrivate.holeCards).not.toEqual(otherPrivate.holeCards);
-    expect([...publicHand.board, ...publicHand.board2]).not.toContain(hostPrivate.holeCards[0]);
+    expect([...publicHand.board]).not.toContain(hostPrivate.holeCards[0]);
   });
 
   it('does not expose server-only deck fields in active public hand snapshots', () => {
@@ -51,7 +51,6 @@ describe('room command model', () => {
     expect(publicJson).not.toContain('participants');
     snapshot(room, host.id).privateState?.holeCards.forEach((card) => {
       expect(snapshot(room, host.id).publicState.hand?.board).not.toContain(card);
-      expect(snapshot(room, host.id).publicState.hand?.board2).not.toContain(card);
     });
   });
 
@@ -547,5 +546,55 @@ describe('room command model', () => {
     expect(act(room, folderPlayer, { action: 'fold', nonce: hand.actionNonce }).ok).toBe(true);
     expect(room.hand?.phase).toBe('complete');
     expect(room.audit.some((entry) => entry.type === 'bounty.seven_two' && entry.actor === winner.playerId)).toBe(true);
+  });
+
+  it('skips the straddle and acts button-first heads-up', () => {
+    const { room, host } = hostRoom('HEADSUP2', 'Heads Up');
+    sit(room, host, 0);
+    const joined = joinRoom(room, 'Solo');
+    if (!joined.ok) throw new Error(joined.error);
+    const solo = playerInRoom(room, joined.playerId)!;
+    solo.socketIds.add('solo-socket');
+    sit(room, solo, 1);
+    setReady(room, solo, true);
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    expect(hand.straddleSeat).toBeNull();
+    expect(hand.smallBlindSeat).toBe(hand.buttonSeat);
+    expect(hand.currentTurnSeat).toBe(hand.buttonSeat);
+  });
+
+  it('collects a per-hand ante when configured', () => {
+    const { room, host } = setupThreePlayers();
+    expect(updateSettings(room, host, { ante: 5 }).ok).toBe(true);
+    expect(startGame(room, host).ok).toBe(true);
+    const hand = room.hand!;
+    expect([...hand.participants.values()].every((p) => p.committedThisHand >= 5)).toBe(true);
+    expect(room.audit.some((e) => e.type === 'blind.posted' && e.message.includes('ante'))).toBe(true);
+  });
+
+  it('queues mandatory-straddle and forces a straddle even when the table setting is off', () => {
+    const { room, host } = setupThreePlayers();
+    expect(updateSettings(room, host, { straddle: { enabled: false } }).ok).toBe(true);
+    expect(queueMode(room, host, 'straddle').ok).toBe(true);
+    expect(room.queuedMode?.label).toContain('straddle');
+    expect(startGame(room, host).ok).toBe(true);
+    expect(room.hand!.straddleSeat).not.toBeNull();
+  });
+
+  it('reveals only the winner\'s single card under the show-one modifier', () => {
+    const { room, host } = setupThreePlayers();
+    expect(queueMode(room, host, 'show_one').ok).toBe(true);
+    expect(startGame(room, host).ok).toBe(true);
+    let guard = 0;
+    while (room.hand && room.hand.phase !== 'complete') {
+      if (++guard > 200) throw new Error('hand did not resolve');
+      const actor = [...room.players.values()].find((p) => p.seat === room.hand!.currentTurnSeat)!;
+      actor.actionTimestamps = [];
+      const legal = snapshot(room, actor.id).privateState!.legalActions;
+      act(room, actor, { action: legal.canCheck ? 'check' : 'call', nonce: room.hand!.actionNonce });
+    }
+    expect(room.hand!.modifiers.showOne).toBe(true);
+    expect(room.hand!.revealedHands.every((r) => r.cards.length === 1)).toBe(true);
   });
 });

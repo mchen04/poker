@@ -45,6 +45,8 @@ export default class PokerServer implements Party.Server {
   private botController: BotController;
   /** When set, the next hand auto-deals at this time (continuous play). */
   private autoStartAt: number | null = null;
+  /** When the last human disconnected; drives idle-room cleanup. Null while a human is present. */
+  private humansGoneSince: number | null = null;
 
   constructor(readonly room: Party.Room) {
     this.poker = createEmptyRoom(room.id);
@@ -87,6 +89,7 @@ export default class PokerServer implements Party.Server {
 
   onConnect(conn: Party.Connection): void {
     this.conns.add(conn);
+    this.humansGoneSince = null;
   }
 
   onClose(conn: Party.Connection): void {
@@ -98,11 +101,14 @@ export default class PokerServer implements Party.Server {
       this.maybeReassignHost(playerId);
       this.broadcast();
     }
-    // With no humans connected, pause progression: stop bots and auto-deal.
+    // With no humans connected, pause progression: stop bots and auto-deal, and
+    // arm a one-shot idle-cleanup alarm so the room doesn't linger in storage.
     if (this.conns.size() === 0) {
       this.botController.dispose();
       this.autoStartAt = null;
-      void this.alarmScheduler.schedule(this.poker, null);
+      this.humansGoneSince = Date.now();
+      this.alarmScheduler.invalidate();
+      void this.room.storage.setAlarm(Date.now() + EMPTY_ROOM_GRACE_MS).catch(() => undefined);
     }
   }
 
@@ -122,17 +128,27 @@ export default class PokerServer implements Party.Server {
   }
 
   async onAlarm(): Promise<void> {
-    // Idle room with no humans: free storage so it doesn't linger, then hibernate.
+    // A fired DO alarm is consumed; clear the scheduler's cached target so the
+    // next schedule() actually re-arms it.
+    this.alarmScheduler.invalidate();
     if (this.conns.size() === 0) {
-      if (this.poker.emptySince !== null && Date.now() - this.poker.emptySince > EMPTY_ROOM_GRACE_MS) {
+      // No humans: once the grace window elapses, free storage; otherwise re-arm.
+      if (this.humansGoneSince !== null && Date.now() - this.humansGoneSince > EMPTY_ROOM_GRACE_MS) {
         try {
           await this.room.storage.deleteAll();
+        } catch {
+          /* ignore */
+        }
+      } else {
+        try {
+          await this.room.storage.setAlarm(Date.now() + EMPTY_ROOM_GRACE_MS);
         } catch {
           /* ignore */
         }
       }
       return;
     }
+    this.humansGoneSince = null;
     let changed = false;
     const hand = this.poker.hand;
     if (
@@ -182,22 +198,26 @@ export default class PokerServer implements Party.Server {
       conn.close();
       return;
     }
-    if (command.type === "addBot") {
-      const result = this.botController.addBot(this.poker);
-      if (!result.ok) this.sendError(conn, result.error, command.reqId);
-      else this.broadcast();
-      return;
-    }
-    if (command.type === "removeBot") {
-      this.botController.removeBot(this.poker, command.playerId);
-      this.broadcast();
-      return;
-    }
-
     const playerId = this.connPlayer.get(conn.id);
     const player = playerId ? this.poker.players.get(playerId) : undefined;
     if (!player) {
       this.sendError(conn, "Join the room first.", command.reqId);
+      return;
+    }
+
+    if (command.type === "addBot" || command.type === "removeBot") {
+      if (!player.isHost) {
+        this.sendError(conn, "Only the host can manage bots.", command.reqId);
+        return;
+      }
+      if (command.type === "addBot") {
+        const result = this.botController.addBot(this.poker);
+        if (!result.ok) this.sendError(conn, result.error, command.reqId);
+        else this.broadcast();
+      } else {
+        this.botController.removeBot(this.poker, command.playerId);
+        this.broadcast();
+      }
       return;
     }
 

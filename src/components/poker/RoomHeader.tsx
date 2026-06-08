@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { RoomPublicState } from "@/modes/holdem/shared/types";
+import { END_GAME_CONFIRM_MS } from "@/lib/constants";
 import { D } from "@/lib/theme";
 
 export function RoomHeader({
@@ -20,7 +21,21 @@ export function RoomHeader({
   onTogglePanel: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [endArmed, setEndArmed] = useState(false);
+  const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seated = publicState.players.filter((p) => p.seat !== null).length;
+
+  function handleEnd() {
+    if (endArmed) {
+      if (endTimer.current) clearTimeout(endTimer.current);
+      setEndArmed(false);
+      onEnd();
+      return;
+    }
+    setEndArmed(true);
+    if (endTimer.current) clearTimeout(endTimer.current);
+    endTimer.current = setTimeout(() => setEndArmed(false), END_GAME_CONFIRM_MS);
+  }
 
   function copyInvite() {
     if (typeof window === "undefined") return;
@@ -53,7 +68,7 @@ export function RoomHeader({
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <HeaderBtn label={copied ? "Copied!" : "Invite"} onClick={copyInvite} />
-        {isHost && <HeaderBtn label="End & export" onClick={onEnd} />}
+        {isHost && <HeaderBtn label={endArmed ? "Confirm end?" : "End & export"} tone={endArmed ? "danger" : undefined} onClick={handleEnd} />}
         <HeaderBtn label="Leave" tone="danger" onClick={onLeave} />
         <HeaderBtn label="☰" onClick={onTogglePanel} mobileOnly />
       </div>

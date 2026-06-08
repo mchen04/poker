@@ -1,8 +1,9 @@
 "use client";
 
 import type { ClientCommand, RoomPublicState } from "@/modes/holdem/shared/types";
-import { chips } from "@/lib/utils";
+import { canStartGame, chips, seatedReadyCount } from "@/lib/utils";
 import { D } from "@/lib/theme";
+import { shadows } from "@/lib/tokens";
 
 /** Pre-game controls: seat selection, ready toggle, and host start. */
 export function LobbyControls({
@@ -16,12 +17,12 @@ export function LobbyControls({
 }) {
   const me = publicState.players.find((p) => p.id === myId);
   const isHost = me?.isHost ?? false;
-  const seatedReady = publicState.players.filter((p) => p.seat !== null && p.ready && p.stack > 0).length;
-  const canStart = isHost && seatedReady >= publicState.settings.minSeats;
+  const seatedReady = seatedReadyCount(publicState);
+  const canStart = canStartGame(publicState, isHost);
   const playerBySeat = new Map(publicState.players.filter((p) => p.seat !== null).map((p) => [p.seat as number, p]));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 14, background: "linear-gradient(180deg, rgba(20,60,36,0.95), rgba(10,40,22,0.98))", border: "1px solid rgba(201,165,74,0.28)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 14, background: D.panelBold, border: `1px solid ${D.panelBorder}` }}>
       <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.14em", textTransform: "uppercase", color: D.gold }}>
         Take a seat · {publicState.settings.smallBlind}/{publicState.settings.bigBlind} blinds · {chips(publicState.settings.startingStack)} stack
       </div>
@@ -92,7 +93,7 @@ export function LobbyControls({
               background: canStart ? D.goldButton : "rgba(255,255,255,0.06)",
               color: canStart ? "#2a1a08" : "rgba(255,255,255,0.3)",
               border: "none",
-              boxShadow: canStart ? "0 3px 0 #78350f" : "none",
+              boxShadow: canStart ? shadows.goldButton : "none",
               cursor: canStart ? "pointer" : "not-allowed",
             }}
           >

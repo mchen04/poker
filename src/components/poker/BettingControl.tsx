@@ -5,6 +5,9 @@ import type { HandPublic, LegalActions, PlayerAction, PlayerPublic } from "@/mod
 import { chips, clamp } from "@/lib/utils";
 import { D } from "@/lib/theme";
 
+/** How long a large-bet/all-in confirm stays armed before resetting (ms). */
+const ARM_CONFIRM_MS = 4000;
+
 /**
  * The poker action rail (net-new vs Ding). Fold / Check / Call / All-in quick
  * buttons plus a bet/raise sizer with a typed exact-amount input, a slider, and
@@ -44,7 +47,12 @@ export function BettingControl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hand.actionNonce, hand.phase, minTarget, maxTarget]);
 
-  const commitChips = (legal.canBet ? target - me.currentBet : target - me.currentBet);
+  // Clear any pending confirm timer on unmount (the turn can end while armed).
+  useEffect(() => () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+  }, []);
+
+  const commitChips = target - me.currentBet;
   const isLargeSize = canSize && commitChips >= (me.stack * largeBetThresholdPct) / 100;
 
   function arm(kind: "size" | "allin", fn: () => void, needsConfirm: boolean) {
@@ -55,7 +63,7 @@ export function BettingControl({
     }
     setArmed(kind);
     if (armTimer.current) clearTimeout(armTimer.current);
-    armTimer.current = setTimeout(() => setArmed(null), 4000);
+    armTimer.current = setTimeout(() => setArmed(null), ARM_CONFIRM_MS);
   }
 
   function submitSize() {
@@ -71,7 +79,8 @@ export function BettingControl({
   // Hotkeys.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) return;
       const k = e.key.toLowerCase();
       if (k === "f" && legal.canFold) onAct("fold");
       else if (k === "c" && legal.canCheck) onAct("check");

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ClientCommand, CustomModeName, HostActionName, RoomPublicState } from "@/modes/holdem/shared/types";
-import { modeLabel } from "@/modes/holdem/shared/modes";
+import type { ClientCommand, HostActionName, RoomPublicState } from "@/modes/holdem/shared/types";
+import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
 import { chips } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { HostSettings } from "./HostSettings";
@@ -128,7 +128,6 @@ function ModesTab({ publicState, send }: { publicState: RoomPublicState; send: (
   const allowed = publicState.settings.custom.allowedModes;
   const queued = publicState.queuedMode;
   const enabled = publicState.settings.custom.enabled;
-  const ALL: CustomModeName[] = ["holdem", "omaha4", "bomb_pot", "show_one", "seven_two"];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
       <div style={{ color: D.sub }}>Queue a one-hand variant for the next hand.</div>
@@ -139,7 +138,7 @@ function ModesTab({ publicState, send }: { publicState: RoomPublicState; send: (
       )}
       {!enabled && <div style={{ color: D.muted }}>Custom queue is disabled.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        {ALL.map((mode) => {
+        {ALL_CUSTOM_MODES.map((mode) => {
           const ok = enabled && allowed.includes(mode);
           return (
             <button

@@ -52,6 +52,10 @@ export interface HandInternal extends HandPublic {
   deck: Card[];
   initialDeck: Card[];
   shuffleSeed: string;
+  /** sha256 commitment to the shuffled deck; kept server-side for fairness/audit, never broadcast. */
+  shuffleCommitment: string;
+  /** Deck preimage, set at hand end. Server-side only — broadcasting it would leak mucked hands. */
+  shuffleReveal?: string;
   fullRaiseBase: number;
   participants: Map<number, ParticipantInternal>;
 }
@@ -446,14 +450,19 @@ function buildHand(room: RoomInternal): SocketResult {
   const headsUp = players.length === 2;
   const smallBlindSeat = headsUp ? buttonSeat : nextOccupiedSeat(room, buttonSeat, players);
   const bigBlindSeat = headsUp ? nextOccupiedSeat(room, buttonSeat, players) : nextOccupiedSeat(room, smallBlindSeat, players);
-  const straddleSeat =
-    room.settings.straddle.enabled && room.settings.straddle.mode !== 'off'
-      ? room.settings.straddle.mode === 'button'
-        ? buttonSeat
-        : nextOccupiedSeat(room, bigBlindSeat, players)
-      : null;
   const queued = room.queuedMode;
   const mode = mergeMode('holdem', queued);
+  // The mandatory-straddle one-hand modifier forces a straddle even when the
+  // table setting is off. Heads-up has no UTG seat between BB and button, so a
+  // straddle there would wrap onto the button — never straddle heads-up.
+  const wantStraddle =
+    !headsUp &&
+    (Boolean(mode.modifiers.mandatoryStraddle) || (room.settings.straddle.enabled && room.settings.straddle.mode !== 'off'));
+  const straddleSeat = wantStraddle
+    ? room.settings.straddle.mode === 'button'
+      ? buttonSeat
+      : nextOccupiedSeat(room, bigBlindSeat, players)
+    : null;
   const { deck, seed, commitment } = shuffleDeck();
   const initialDeck = [...deck];
   const participants = new Map<number, ParticipantInternal>();
@@ -491,7 +500,6 @@ function buildHand(room: RoomInternal): SocketResult {
     minRaise: room.settings.bigBlind,
     fullRaiseBase: 0,
     board: [],
-    board2: [],
     pots: [],
     eligibleSeatNumbers: [...participants.keys()],
     lastAggressorSeat: null,
@@ -520,6 +528,18 @@ function buildHand(room: RoomInternal): SocketResult {
     shuffleCommitment: commitment
   });
   if (!mode.modifiers.bombPot) {
+    if (room.settings.ante > 0) {
+      hand.participants.forEach((participant) => {
+        const player = room.players.get(participant.playerId);
+        if (!player || player.stack <= 0) return;
+        const ante = Math.min(player.stack, room.settings.ante);
+        player.stack -= ante;
+        reconcileStackStatus(player);
+        participant.committedThisHand += ante;
+        if (player.stack === 0) participant.allIn = true;
+        audit(room, 'blind.posted', `${player.name} posted ante ${ante}`, player.id, { seat: participant.seat, amount: ante, label: 'ante' });
+      });
+    }
     postBlind(room, hand, smallBlindSeat, room.settings.smallBlind, 'small blind');
     postBlind(room, hand, bigBlindSeat, room.settings.bigBlind, 'big blind');
     if (straddleSeat !== null) postBlind(room, hand, straddleSeat, Math.max(room.settings.straddle.amount, room.settings.bigBlind * 2), 'straddle');
@@ -806,10 +826,7 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
   dealStreet(hand, phase);
   assignTurn(hand, firstActionSeat(room, hand));
   resolveDisconnectedTurns(room);
-  audit(room, `street.${phase}`, `${phase[0].toUpperCase()}${phase.slice(1)} dealt`, undefined, {
-    board: hand.board,
-    board2: hand.board2
-  });
+  audit(room, `street.${phase}`, `${phase[0].toUpperCase()}${phase.slice(1)} dealt`, undefined, { board: hand.board });
 }
 
 function dealStreet(hand: HandInternal, phase: HandPhase): void {
@@ -829,7 +846,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   const total = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
   player.stack += total;
   const awards = [`${player.name} won ${total} without showdown.`];
-  if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
+  if (room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
   hand.phase = 'complete';
   assignTurn(hand, null);
   hand.winningSeats = [winner.seat];
@@ -838,7 +855,7 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   reconcileHandParticipants(room, hand);
   audit(room, 'pot.awarded', hand.summary, player.id, { amount: total });
-  audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
+  audit(room, 'hand.ended', `Hand ${hand.number} ended`);
 }
 
 function showdown(room: RoomInternal): void {
@@ -857,25 +874,30 @@ function showdown(room: RoomInternal): void {
     awardPotShares(room, pot.amount, boardWinners, pot.label, awards);
   });
 
-  if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) {
+  if (room.settings.sevenTwo.enabled) {
     applySevenTwoBounty(room, live.filter((entry) => winningSeats.has(entry.seat)), awards);
   }
 
   if (hand.modifiers.showOne) {
+    // Winner-shows-one: each winner reveals exactly their first hole card;
+    // losers muck (not revealed). The audit records the shown card.
     live
       .filter((entry) => winningSeats.has(entry.seat))
       .forEach((entry) => {
         const player = room.players.get(entry.playerId);
         if (player) audit(room, 'show.one_card', `${player.name} showed ${cardLabel(entry.holeCards[0])}`, player.id);
       });
+    hand.revealedHands = live
+      .filter((entry) => winningSeats.has(entry.seat))
+      .map((entry) => ({ seat: entry.seat, playerId: entry.playerId, cards: entry.holeCards.slice(0, 1), handName: '' }));
+  } else {
+    hand.revealedHands = live.map((entry) => ({
+      seat: entry.seat,
+      playerId: entry.playerId,
+      cards: entry.holeCards,
+      handName: rankHighHand(hand.variant, entry.holeCards, hand.board).name
+    }));
   }
-
-  hand.revealedHands = live.map((entry) => ({
-    seat: entry.seat,
-    playerId: entry.playerId,
-    cards: entry.holeCards,
-    handName: rankHighHand(hand.variant, entry.holeCards, hand.board).name
-  }));
   hand.phase = 'complete';
   assignTurn(hand, null);
   hand.winningSeats = [...winningSeats];
@@ -883,8 +905,8 @@ function showdown(room: RoomInternal): void {
   hand.summary = awards.join(' · ') || 'Hand ended with no award.';
   hand.shuffleReveal = `${hand.shuffleSeed}:${hand.initialDeck.join(',')}`;
   reconcileHandParticipants(room, hand);
-  audit(room, 'showdown', hand.summary, undefined, { board: hand.board, board2: hand.board2 });
-  audit(room, 'hand.ended', `Hand ${hand.number} ended`, undefined, { shuffleRevealAvailable: true });
+  audit(room, 'showdown', hand.summary, undefined, { board: hand.board });
+  audit(room, 'hand.ended', `Hand ${hand.number} ended`);
 }
 
 function awardPotShares(

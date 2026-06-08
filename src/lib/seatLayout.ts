@@ -17,29 +17,16 @@ export function getSeatPosition(
 
 export function computeTableLayout({
   playerCount,
-  handsPerPlayer,
   isMobile,
   isLandscape,
 }: {
   playerCount: number;
-  handsPerPlayer: number;
   isMobile: boolean;
   isLandscape: boolean;
 }): { xRadius: number; yRadius: number; opponentScale: number } {
   const n = playerCount;
-  const load = n * handsPerPlayer;
-  const xRadius = isMobile
-    ? isLandscape
-      ? load >= 12 ? 26 : n >= 5 ? 29 : 32
-      : load >= 12 ? 37 : n >= 5 ? 40 : 43
-    : 46;
-  const yRadius = isMobile
-    ? isLandscape
-      ? load >= 12 ? 28 : n >= 5 ? 32 : 36
-      : load >= 12 ? 20 : n >= 5 ? 23 : 28
-    : 43;
-  const opponentScale = isMobile
-    ? Math.max(0.6, 1 - Math.max(0, load - 4) * 0.04)
-    : 1;
+  const xRadius = isMobile ? (isLandscape ? (n >= 5 ? 29 : 32) : n >= 5 ? 40 : 43) : 46;
+  const yRadius = isMobile ? (isLandscape ? (n >= 5 ? 32 : 36) : n >= 5 ? 23 : 28) : 43;
+  const opponentScale = isMobile ? Math.max(0.6, 1 - Math.max(0, n - 4) * 0.04) : 1;
   return { xRadius, yRadius, opponentScale };
 }

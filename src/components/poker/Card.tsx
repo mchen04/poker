@@ -27,16 +27,16 @@ export function PokerCard({
   highlight?: boolean;
   dim?: boolean;
 }) {
-  const dim_ = DIMS[size];
+  const metrics = DIMS[size];
 
   if (!card || faceDown) {
     const empty = !card && !faceDown;
     return (
       <div
         style={{
-          width: dim_.w,
-          height: dim_.h,
-          borderRadius: Math.round(dim_.w * 0.16),
+          width: metrics.w,
+          height: metrics.h,
+          borderRadius: Math.round(metrics.w * 0.16),
           background: empty
             ? "rgba(0,0,0,0.28)"
             : "repeating-linear-gradient(45deg, #7a1322 0 6px, #5e0e1a 6px 12px)",
@@ -52,9 +52,9 @@ export function PokerCard({
   return (
     <div
       style={{
-        width: dim_.w,
-        height: dim_.h,
-        borderRadius: Math.round(dim_.w * 0.16),
+        width: metrics.w,
+        height: metrics.h,
+        borderRadius: Math.round(metrics.w * 0.16),
         background: "#fbf7ec",
         border: highlight ? `2px solid ${D.goldBright}` : "1px solid rgba(0,0,0,0.35)",
         boxShadow: highlight ? `0 0 12px ${D.gold}` : "0 2px 6px rgba(0,0,0,0.45)",
@@ -69,9 +69,9 @@ export function PokerCard({
         flex: "0 0 auto",
       }}
     >
-      <span style={{ position: "absolute", top: 2, left: 4, fontSize: dim_.rank, lineHeight: 1 }}>{label}</span>
-      <span style={{ fontSize: dim_.pip, lineHeight: 1 }}>{symbol}</span>
-      <span style={{ position: "absolute", bottom: 2, right: 4, fontSize: dim_.rank, lineHeight: 1, transform: "rotate(180deg)" }}>{label}</span>
+      <span style={{ position: "absolute", top: 2, left: 4, fontSize: metrics.rank, lineHeight: 1 }}>{label}</span>
+      <span style={{ fontSize: metrics.pip, lineHeight: 1 }}>{symbol}</span>
+      <span style={{ position: "absolute", bottom: 2, right: 4, fontSize: metrics.rank, lineHeight: 1, transform: "rotate(180deg)" }}>{label}</span>
     </div>
   );
 }

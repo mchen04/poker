@@ -21,7 +21,7 @@ export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | '
 export type HandPhase = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
 export type Variant = 'holdem' | 'omaha4';
 export type CustomPermission = 'creator_only' | 'button' | 'everyone_with_cooldown';
-export type CustomModeName = 'holdem' | 'omaha4' | 'bomb_pot' | 'show_one' | 'seven_two';
+export type CustomModeName = 'holdem' | 'omaha4' | 'bomb_pot' | 'show_one' | 'straddle';
 
 export interface RoomSettings {
   roomName: string;
@@ -122,7 +122,7 @@ export interface QueuedCustomMode {
   modifiers: {
     bombPot?: boolean;
     showOne?: boolean;
-    sevenTwo?: boolean;
+    mandatoryStraddle?: boolean;
   };
   label: string;
 }
@@ -143,13 +143,10 @@ export interface HandPublic {
   currentBet: number;
   minRaise: number;
   board: Card[];
-  board2: Card[];
   pots: PotPublic[];
   eligibleSeatNumbers: number[];
   lastAggressorSeat: number | null;
   actionNonce: number;
-  shuffleCommitment: string;
-  shuffleReveal?: string;
   winners: string[];
   summary: string;
   /** Seats that won any pot this hand (for UI highlight). */

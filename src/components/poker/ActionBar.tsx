@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { ClientCommand, PlayerAction, PrivateState, RoomPublicState } from "@/modes/holdem/shared/types";
 import { D } from "@/lib/theme";
+import { shadows } from "@/lib/tokens";
+import { canStartGame, seatedReadyCount } from "@/lib/utils";
 import { PokerCard } from "./Card";
 import { BettingControl } from "./BettingControl";
 
@@ -20,7 +22,7 @@ export function ActionBar({
   const me = publicState.players.find((p) => p.id === myId);
   const hand = publicState.hand;
   const isHost = me?.isHost ?? false;
-  const seatedReady = publicState.players.filter((p) => p.seat !== null && p.ready && p.stack > 0).length;
+  const seatedReady = seatedReadyCount(publicState);
   const ended = publicState.lifecycle === "ended";
 
   const onAct = (action: PlayerAction, amount?: number) => {
@@ -31,7 +33,7 @@ export function ActionBar({
   // Between hands (lobby with no active hand, or a completed hand showing).
   const betweenHands = !hand || hand.phase === "complete";
   if (betweenHands) {
-    const canStart = !ended && isHost && seatedReady >= publicState.settings.minSeats && publicState.lifecycle !== "ended";
+    const canStart = canStartGame(publicState, isHost);
     return (
       <div style={panelStyle}>
         {hand?.summary && (
@@ -123,7 +125,7 @@ function PrimaryButton({ label, onClick }: { label: string; onClick: () => void 
         background: D.goldButton,
         color: "#2a1a08",
         border: "none",
-        boxShadow: "0 3px 0 #78350f, 0 6px 16px rgba(0,0,0,0.35)",
+        boxShadow: shadows.goldButton,
         cursor: "pointer",
       }}
     >
@@ -138,7 +140,7 @@ const panelStyle: React.CSSProperties = {
   gap: 8,
   padding: 10,
   borderRadius: 14,
-  background: "linear-gradient(180deg, rgba(20,60,36,0.95), rgba(10,40,22,0.98))",
-  border: "1px solid rgba(201,165,74,0.28)",
+  background: D.panelBold,
+  border: `1px solid ${D.panelBorder}`,
   boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
 };

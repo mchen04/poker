@@ -35,9 +35,6 @@ export class AlarmScheduler {
     if (autoStartAt !== null) {
       candidates.push(autoStartAt);
     }
-    if (room.emptySince !== null) {
-      candidates.push(room.emptySince + EMPTY_ROOM_GRACE_MS);
-    }
     try {
       if (candidates.length === 0) {
         if (this.lastTarget !== null) {

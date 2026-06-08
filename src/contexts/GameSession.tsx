@@ -20,6 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import PartySocket from "partysocket";
 import type { ClientCommand, PrivateState, RoomPublicState, ServerEvent } from "@/modes/holdem/shared/types";
+import { TOAST_DURATION_MS } from "@/lib/constants";
 
 export interface GameSessionValue {
   code: string;
@@ -84,7 +85,7 @@ export function GameSessionProvider({
   const showNotice = useCallback((message: string) => {
     setNotice(message);
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), 3200);
+    noticeTimer.current = setTimeout(() => setNotice(null), TOAST_DURATION_MS);
   }, []);
 
   useEffect(() => {
@@ -147,6 +148,13 @@ export function GameSessionProvider({
 
     return () => {
       socket.close();
+      if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+        const w = window as unknown as Record<string, unknown>;
+        delete w.__pokerSend;
+        delete w.__pokerPublic;
+        delete w.__pokerPrivate;
+        delete w.__pokerMyId;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerName, code, router, showNotice]);

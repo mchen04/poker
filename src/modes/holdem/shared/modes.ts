@@ -1,5 +1,8 @@
 import type { CustomModeName, QueuedCustomMode, RoomSettings, Variant } from './types';
 
+/** Every queueable one-hand modifier. Single source for UI + validation. */
+export const ALL_CUSTOM_MODES: CustomModeName[] = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle'];
+
 export function modeLabel(mode: CustomModeName): string {
   switch (mode) {
     case 'holdem':
@@ -10,8 +13,8 @@ export function modeLabel(mode: CustomModeName): string {
       return 'Bomb pot';
     case 'show_one':
       return 'Winner shows one';
-    case 'seven_two':
-      return '7-2 bounty';
+    case 'straddle':
+      return 'Mandatory straddle';
   }
 }
 
@@ -31,7 +34,7 @@ export function buildQueuedMode(
     modifiers: {
       bombPot: mode === 'bomb_pot',
       showOne: mode === 'show_one',
-      sevenTwo: mode === 'seven_two'
+      mandatoryStraddle: mode === 'straddle'
     },
     label: modeLabel(mode)
   };
@@ -49,7 +52,7 @@ export function mergeMode(baseVariant: Variant, queued: QueuedCustomMode | null)
     modifiers: {
       bombPot: queued?.modifiers.bombPot,
       showOne: queued?.modifiers.showOne,
-      sevenTwo: queued?.modifiers.sevenTwo
+      mandatoryStraddle: queued?.modifiers.mandatoryStraddle
     }
   };
 }

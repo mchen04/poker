@@ -13,7 +13,7 @@ export function CommunityBoard({ hand, compact = false }: { hand: HandPublic; co
   const modifierTags: string[] = [];
   if (hand.modifiers.bombPot) modifierTags.push("BOMB");
   if (hand.modifiers.showOne) modifierTags.push("SHOW-1");
-  if (hand.modifiers.sevenTwo) modifierTags.push("7-2");
+  if (hand.modifiers.mandatoryStraddle) modifierTags.push("STRADDLE");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: compact ? 6 : 10 }}>

@@ -7,7 +7,7 @@
 import { z } from 'zod';
 import type { ClientCommand } from './types';
 
-const customModes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
+const customModes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle'] as const;
 
 const settingsPatchSchema = z
   .object({

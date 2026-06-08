@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ClientCommand, CustomModeName, RoomSettings } from "@/modes/holdem/shared/types";
-import { modeLabel } from "@/modes/holdem/shared/modes";
+import type { ClientCommand, RoomSettings } from "@/modes/holdem/shared/types";
+import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
 import { D } from "@/lib/theme";
-
-const ALL_MODES: CustomModeName[] = ["holdem", "omaha4", "bomb_pot", "show_one", "seven_two"];
 
 export function HostSettings({
   settings,
@@ -20,8 +18,14 @@ export function HostSettings({
 }) {
   const [draft, setDraft] = useState<RoomSettings>(settings);
 
-  // Re-sync the draft whenever the authoritative settings change.
-  useEffect(() => setDraft(settings), [settings]);
+  // Re-sync the draft only when the authoritative settings CONTENT changes, not
+  // on every snapshot (each broadcast is a fresh object reference, which would
+  // otherwise clobber the host's in-progress edits).
+  const settingsKey = JSON.stringify(settings);
+  useEffect(() => {
+    setDraft(settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsKey]);
 
   const set = <K extends keyof RoomSettings>(key: K, value: RoomSettings[K]) => setDraft((d) => ({ ...d, [key]: value }));
   const disabled = !isHost;
@@ -73,7 +77,7 @@ export function HostSettings({
         />
         <Num label="Cooldown (hands)" value={draft.custom.cooldownHands} disabled={disabled} onChange={(v) => set("custom", { ...draft.custom, cooldownHands: v })} />
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {ALL_MODES.map((mode) => {
+          {ALL_CUSTOM_MODES.map((mode) => {
             const on = draft.custom.allowedModes.includes(mode);
             return (
               <button

@@ -41,7 +41,6 @@ export function PokerTable({
   const selfIndex = Math.max(0, seated.findIndex((p) => p.id === myId));
   const { xRadius, yRadius, opponentScale } = computeTableLayout({
     playerCount: Math.max(seated.length, 1),
-    handsPerPlayer: 1,
     isMobile,
     isLandscape,
   });

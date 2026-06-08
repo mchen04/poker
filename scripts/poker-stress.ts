@@ -115,7 +115,7 @@ function readyBots() {
 
 function maybeQueueMode() {
   if (room.queuedMode || Math.random() > 0.2) return;
-  const modes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
+  const modes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'straddle'] as const;
   queueMode(room, host, modes[Math.floor(Math.random() * modes.length)]);
 }
 
@@ -125,7 +125,7 @@ function totalChips() {
 
 function assertNoLeak() {
   const publicState = snapshot(room, host.id).publicState;
-  const visibleCards = new Set([...(publicState.hand?.board ?? []), ...(publicState.hand?.board2 ?? [])]);
+  const visibleCards = new Set([...(publicState.hand?.board ?? [])]);
   room.players.forEach((player) => {
     const privateCards = snapshot(room, player.id).privateState?.holeCards ?? [];
     const publicPlayer = publicState.players.find((entry: PlayerPublic) => entry.id === player.id);

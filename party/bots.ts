@@ -125,8 +125,14 @@ export class BotController {
         const seat = room.seats.findIndex((s) => s === null);
         if (seat >= 0 && sit(room, bot, seat).ok) changed = true;
       }
-      if (bot.seat !== null && bot.stack < room.settings.bigBlind) {
-        if (requestChips(room, bot, room.settings.buyIn, "bot rebuy").ok) changed = true;
+      // Only auto-rebuy when chips would actually be added immediately; if the
+      // host requires manual approval, leave the bot busted (no defer/broadcast spin).
+      if (
+        bot.seat !== null &&
+        bot.stack < room.settings.bigBlind &&
+        (room.settings.selfServiceChips || room.settings.autoApproveChips)
+      ) {
+        if (requestChips(room, bot, room.settings.buyIn, "bot rebuy").ok && bot.stack >= room.settings.bigBlind) changed = true;
       }
       if (bot.seat !== null && bot.stack > 0 && !bot.ready) {
         if (setReady(room, bot, true).ok) changed = true;
