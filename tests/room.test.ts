@@ -119,6 +119,22 @@ describe('room command model', () => {
     expect(room.hand?.currentTurnSeat).toBe(currentTurn);
   });
 
+  it('times out a disconnected player when turn rotation reaches them', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const firstActor = [...room.players.values()].find((player) => player.seat === room.hand!.currentTurnSeat)!;
+    const occupiedSeats = [...room.hand!.participants.keys()].sort((a, b) => a - b);
+    const nextSeat = occupiedSeats.find((seat) => seat > firstActor.seat!) ?? occupiedSeats[0];
+    const nextActor = [...room.players.values()].find((player) => player.seat === nextSeat)!;
+    const nextSocket = [...nextActor.socketIds][0];
+    detachSocket(nextSocket);
+    expect(room.hand?.currentTurnSeat).toBe(firstActor.seat);
+    const legal = snapshot(room, firstActor.id).privateState!.legalActions;
+    expect(act(room, firstActor, { action: legal.canCall ? 'call' : 'check', nonce: room.hand!.actionNonce }).ok).toBe(true);
+    expect(room.audit.some((entry) => entry.actor === nextActor.id && (entry.type === 'timeout.fold' || entry.type === 'timeout.check'))).toBe(true);
+    expect(room.hand?.currentTurnSeat).not.toBe(nextActor.seat);
+  });
+
   it('queues an MVP custom mode and audit logs chip requests', () => {
     const { room, host } = setupThreePlayers();
     const queued = queueMode(room, host, 'omaha4');

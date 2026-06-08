@@ -2,24 +2,7 @@ import { nanoid } from 'nanoid';
 import { cardLabel, isSevenTwo } from '../shared/cards';
 import { buildQueuedMode, mergeMode, modeLabel, validateMode } from '../shared/modes';
 import { cleanChat, cleanName, clampInt } from '../shared/sanitize';
-import type {
-  AuditEntry,
-  Card,
-  ChatEntry,
-  CustomModeName,
-  HandPhase,
-  HandPublic,
-  LegalActions,
-  PlayerPublic,
-  PrivateState,
-  QueuedCustomMode,
-  RoomPublicState,
-  RoomSettings,
-  RoomSettingsPatch,
-  ServerSnapshot,
-  SocketResult,
-  Variant
-} from '../shared/types';
+import type { AuditEntry, Card, ChatEntry, CustomModeName, HandPhase, HandPublic, LegalActions, PlayerPublic, PrivateState, QueuedCustomMode, RoomPublicState, RoomSettings, RoomSettingsPatch, ServerSnapshot, SocketResult, Variant } from '../shared/types';
 import { approveChipsWithSupport, requestChipsWithSupport } from './chipLedger';
 import { hostActionWithSupport, type HostActionPayload } from './hostControls';
 import { handToPublic } from './projection';
@@ -85,6 +68,7 @@ export interface RoomInternal {
   nextHandNumber: number;
   lastButtonSeat: number | null;
   bannedTokens: Set<string>;
+  emptySince: number | null;
   endedExport?: { exportText: string; exportJson: string };
 }
 export const rooms = new Map<string, RoomInternal>();
@@ -234,7 +218,8 @@ export function createRoom(nameInput: string, roomNameInput?: string): SocketRes
     queuedMode: null,
     nextHandNumber: 1,
     lastButtonSeat: null,
-    bannedTokens: new Set()
+    bannedTokens: new Set(),
+    emptySince: null
   };
   rooms.set(code, room);
   audit(room, 'room.created', `${name} created room ${code}`, player.id, { playMoneyOnly: true, noDatabase: true });
@@ -259,6 +244,7 @@ export function joinRoom(
   if (existing) {
     if (existing.banned) return { ok: false, error: 'This player is banned from the room.' };
     existing.status = existing.seat === null ? 'seated' : existing.status === 'disconnected' ? 'seated' : existing.status;
+    room.emptySince = null;
     audit(room, 'player.reconnected', `${existing.name} reconnected`, existing.id);
     return { ok: true, code, playerId: existing.id, sessionToken: existing.sessionToken };
   }
@@ -293,7 +279,10 @@ export function joinRoom(
 
 export function attachSocket(room: RoomInternal, playerId: string, socketId: string): void {
   const player = room.players.get(playerId);
-  if (player && !player.banned) player.socketIds.add(socketId);
+  if (player && !player.banned) {
+    player.socketIds.add(socketId);
+    room.emptySince = null;
+  }
 }
 
 export function detachSocket(socketId: string): RoomInternal[] {
@@ -310,6 +299,7 @@ export function detachSocket(socketId: string): RoomInternal[] {
       }
     });
     if ([...room.players.values()].every((player) => player.socketIds.size === 0)) {
+      room.emptySince ??= Date.now();
       audit(room, 'room.empty', 'All browsers disconnected. Room remains only while the server process is alive.');
     }
   });
@@ -337,11 +327,24 @@ function timeoutDisconnectedParticipant(room: RoomInternal, player: PlayerIntern
   maybeAutoAdvanceOrAward(room);
 }
 
+function resolveDisconnectedTurns(room: RoomInternal): void {
+  const hand = room.hand;
+  if (!hand || hand.phase === 'complete') return;
+  for (let guard = 0; guard < hand.participants.size; guard += 1) {
+    const current = [...room.players.values()].find((player) => player.seat === hand.currentTurnSeat);
+    if (!current || current.socketIds.size > 0 || current.status !== 'disconnected') return;
+    timeoutDisconnectedParticipant(room, current);
+    if (room.hand !== hand || room.hand?.phase === 'complete') return;
+  }
+}
+
 function cleanupEmptyRooms(): void {
   const now = Date.now();
   rooms.forEach((room, code) => {
     const empty = [...room.players.values()].every((player) => player.socketIds.size === 0);
-    if (empty && now - room.createdAt > 60 * 60 * 1000) rooms.delete(code);
+    if (!empty) room.emptySince = null;
+    else room.emptySince ??= now;
+    if (room.emptySince && now - room.emptySince > 60 * 60 * 1000) rooms.delete(code);
   });
 }
 
@@ -734,6 +737,7 @@ function maybeAutoAdvanceOrAward(room: RoomInternal): void {
     active.every((entry) => entry.acted && entry.currentBet === hand.currentBet);
   if (!bettingComplete) {
     hand.currentTurnSeat = nextActiveSeat(room, hand, hand.currentTurnSeat);
+    resolveDisconnectedTurns(room);
     return;
   }
 
@@ -772,6 +776,7 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
   });
   dealStreet(hand, phase);
   hand.currentTurnSeat = firstActionSeat(room, hand);
+  resolveDisconnectedTurns(room);
   audit(room, `street.${phase}`, `${phase[0].toUpperCase()}${phase.slice(1)} dealt`, undefined, {
     board: hand.board,
     board2: hand.board2
