@@ -7,12 +7,14 @@ const created = createRoom('Bot Host', 'Stress Table');
 if (!created.ok) throw new Error(created.error);
 const room = getRoom(created.code)!;
 const host = playerInRoom(room, created.playerId)!;
+host.socketIds.add('bot-host-socket');
 sit(room, host, 0);
 
 for (let index = 1; index < 6; index += 1) {
   const joined = joinRoom(created.code, `Bot ${index}`);
   if (!joined.ok) throw new Error(joined.error);
   const player = playerInRoom(room, joined.playerId)!;
+  player.socketIds.add(`bot-${index}-socket`);
   sit(room, player, index);
 }
 

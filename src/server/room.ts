@@ -388,7 +388,9 @@ export function setReady(room: RoomInternal, player: PlayerInternal, ready: bool
 function eligiblePlayers(room: RoomInternal): PlayerInternal[] {
   return room.seats
     .map((id) => (id ? room.players.get(id) : null))
-    .filter((player): player is PlayerInternal => Boolean(player && !player.spectator && player.stack > 0 && player.status !== 'sitting_out' && player.status !== 'busted'));
+    .filter((player): player is PlayerInternal =>
+      Boolean(player && !player.spectator && player.stack > 0 && player.socketIds.size > 0 && player.status === 'seated')
+    );
 }
 
 function nextOccupiedSeat(room: RoomInternal, after: number | null, players = eligiblePlayers(room)): number | null {

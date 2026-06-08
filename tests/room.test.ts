@@ -7,11 +7,13 @@ function setupThreePlayers() {
   if (!created.ok) throw new Error(created.error);
   const room = getRoom(created.code)!;
   const host = playerInRoom(room, created.playerId)!;
+  host.socketIds.add('host-socket');
   sit(room, host, 0);
   const joined = ['Ari', 'Bo'].map((name, index) => {
     const result = joinRoom(created.code, name);
     if (!result.ok) throw new Error(result.error);
     const player = playerInRoom(room, result.playerId)!;
+    player.socketIds.add(`${name}-socket`);
     sit(room, player, index + 1);
     return player;
   });
@@ -114,6 +116,25 @@ describe('room command model', () => {
     expect(startGame(room, host).ok).toBe(true);
     const secondStart = startGame(room, host);
     expect(secondStart.ok).toBe(false);
+  });
+
+  it('does not deal disconnected seated players into a new hand', () => {
+    const created = createRoom('Host', 'Heads Up');
+    if (!created.ok) throw new Error(created.error);
+    const room = getRoom(created.code)!;
+    const host = playerInRoom(room, created.playerId)!;
+    host.socketIds.add('host-socket');
+    sit(room, host, 0);
+    const joined = joinRoom(room.code, 'Ari');
+    if (!joined.ok) throw new Error(joined.error);
+    const ari = playerInRoom(room, joined.playerId)!;
+    ari.socketIds.add('ari-socket');
+    sit(room, ari, 1);
+    ari.socketIds.clear();
+    ari.status = 'disconnected';
+    const started = startGame(room, host);
+    expect(started.ok).toBe(false);
+    expect(room.hand).toBeNull();
   });
 
   it('rejects destructive host moderation while a hand is active', () => {
