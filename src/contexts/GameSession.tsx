@@ -103,6 +103,9 @@ export function GameSessionProvider({
     }
 
     socket.addEventListener("open", () => {
+      // A successful (re)connect clears any prior transient connection error;
+      // PartySocket auto-reconnects, so the error screen must not stick.
+      setConnectionError(null);
       const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem(tokenKey(code)) ?? undefined : undefined;
       socket.send(JSON.stringify({ type: "join", name: playerName, sessionToken } satisfies ClientCommand));
     });

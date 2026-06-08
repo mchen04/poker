@@ -1,13 +1,13 @@
 "use client";
 
-import type { HandPublic } from "@/modes/holdem/shared/types";
+import type { HandPublic, RoomSettings } from "@/modes/holdem/shared/types";
 import { chips } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { PokerCard } from "./Card";
 
 const VARIANT_LABEL: Record<string, string> = { holdem: "NL HOLD'EM", omaha4: "PLO 4-CARD" };
 
-export function CommunityBoard({ hand, compact = false }: { hand: HandPublic; compact?: boolean }) {
+export function CommunityBoard({ hand, bounty, compact = false }: { hand: HandPublic; bounty?: RoomSettings["sevenTwo"]; compact?: boolean }) {
   const total = hand.pots.reduce((sum, pot) => sum + pot.amount, 0);
   const size = compact ? "xs" : "md";
   const modifierTags: string[] = [];
@@ -29,6 +29,11 @@ export function CommunityBoard({ hand, compact = false }: { hand: HandPublic; co
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: D.muted, textTransform: "uppercase" }}>
           {hand.phase === "complete" ? "final pot" : "pot"} · hand #{hand.number}
         </div>
+        {bounty?.enabled && bounty.bounty > 0 && (
+          <div style={{ fontSize: 9, fontWeight: 800, color: D.warning, marginTop: 2 }}>
+            7-2 bounty {chips(bounty.bounty)}{bounty.suitedBonus > 0 ? ` (+${chips(bounty.suitedBonus)} suited)` : ""}
+          </div>
+        )}
       </div>
 
       {/* Board */}

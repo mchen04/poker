@@ -52,6 +52,8 @@ export interface RoomSettings {
     enabled: boolean;
     bounty: number;
     suitedBonus: number;
+    /** When true, the bounty only pays if the winning 7-2 hand reaches showdown. */
+    requireShowdown: boolean;
   };
   largeBetThresholdPct: number;
   /** Per-turn action clock in seconds for connected players. 0 disables it. */

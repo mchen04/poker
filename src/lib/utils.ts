@@ -1,4 +1,5 @@
 import { ROOM_CODE_LENGTH } from "./constants";
+import { D } from "./theme";
 import type { Card, Rank, RoomPublicState, Suit } from "@/modes/holdem/shared/types";
 
 /** Seated players who are ready and funded — the pool a hand can be dealt from. */
@@ -41,4 +42,14 @@ export function parseCard(card: Card): { symbol: string; red: boolean; label: st
 /** Format a chip count with thousands separators. */
 export function chips(amount: number): string {
   return amount.toLocaleString("en-US");
+}
+
+/** Color for an up/down P&L figure: green up, red down, muted flat. */
+export function upDownColor(upDown: number): string {
+  return upDown > 0 ? D.accent : upDown < 0 ? D.danger : D.muted;
+}
+
+/** Signed, comma-grouped up/down label, e.g. "+1,200" / "-340". */
+export function upDownLabel(upDown: number): string {
+  return `${upDown >= 0 ? "+" : ""}${chips(upDown)}`;
 }

@@ -19,7 +19,6 @@ export const D = {
   panelBold: gradients.panelBold,
   goldButton: gradients.goldButton,
   panelBorder: overlays.panelBorder,
-  cardBg: colors.cardBg,
   feltLight: colors.feltLight,
   serif: typography.serif,
 } as const;

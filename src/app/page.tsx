@@ -173,7 +173,7 @@ function GoldButton({ onClick, children }: { onClick: () => void; children: Reac
       className="w-full py-3 rounded-xl font-black text-sm tracking-wide transition-all active:scale-95"
       style={{
         background: D.goldButton,
-        color: "#2a1a08",
+        color: D.ink,
         boxShadow: shadows.goldButton,
         border: "none",
       }}

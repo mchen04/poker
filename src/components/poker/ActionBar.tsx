@@ -123,7 +123,7 @@ function PrimaryButton({ label, onClick }: { label: string; onClick: () => void 
         fontWeight: 900,
         fontSize: 14,
         background: D.goldButton,
-        color: "#2a1a08",
+        color: D.ink,
         border: "none",
         boxShadow: shadows.goldButton,
         cursor: "pointer",

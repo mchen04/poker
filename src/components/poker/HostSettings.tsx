@@ -64,6 +64,7 @@ export function HostSettings({
         <Toggle label="Enabled" value={draft.sevenTwo.enabled} disabled={disabled} onChange={(v) => set("sevenTwo", { ...draft.sevenTwo, enabled: v })} />
         <Num label="Bounty" value={draft.sevenTwo.bounty} disabled={disabled} onChange={(v) => set("sevenTwo", { ...draft.sevenTwo, bounty: v })} />
         <Num label="Suited bonus" value={draft.sevenTwo.suitedBonus} disabled={disabled} onChange={(v) => set("sevenTwo", { ...draft.sevenTwo, suitedBonus: v })} />
+        <Toggle label="Pay only at showdown" value={draft.sevenTwo.requireShowdown} disabled={disabled} onChange={(v) => set("sevenTwo", { ...draft.sevenTwo, requireShowdown: v })} />
       </Section>
 
       <Section title="Custom one-hand modes">
@@ -125,7 +126,7 @@ export function HostSettings({
             fontWeight: 900,
             fontSize: 13,
             background: canEdit ? D.goldButton : "rgba(255,255,255,0.06)",
-            color: canEdit ? "#2a1a08" : "rgba(255,255,255,0.3)",
+            color: canEdit ? D.ink : "rgba(255,255,255,0.3)",
             border: "none",
             cursor: canEdit ? "pointer" : "not-allowed",
           }}

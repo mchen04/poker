@@ -1,51 +1,38 @@
 /**
- * Single source of truth for visual design tokens — colors, gradients, and
- * typography that the felt/gold chrome depends on.
- *
- * Consumed by tailwind.config.ts (theme.extend.colors), src/lib/theme.ts (the
- * flat `D` alias), and ad-hoc inline styles across the felt/gold chrome.
+ * Visual design tokens — colors, gradients, shadows, and typography for the
+ * felt/gold chrome. Consumed by src/lib/theme.ts (the flat `D` alias) and
+ * ad-hoc inline styles across the poker UI.
  */
 
 export const colors = {
-  // Brand gold scale (used for rim, top-rail, accents, rank-1 chip)
+  // Brand gold scale (rim, top-rail, accents).
   gold: "#c9a54a",
   goldBright: "#f5e6b8",
   goldTop: "#f0d278",
-
-  // Felt & ink (room background, dark text on gold)
+  // Dark ink for text on gold surfaces.
   ink: "#2a1a08",
-  cardBg: "#0a1813",
-  // Mid-tone felt under the felt.png texture overlay (play area background).
+  // Mid-tone felt under the felt.png texture (play-area background).
   feltLight: "#0a3820",
-
-  // Body/secondary text on dark felt
+  // Body / secondary text on dark felt.
   text: "#f5e6b8",
   sub: "#9fc5a8",
   muted: "#6a8a72",
-
-  // Status accents
+  // Status accents.
   accent: "#2fb873",
   danger: "#c06060",
-  // Warning / secondary-emphasis (all-in badge, urgent action clock).
+  // Warning / secondary emphasis (all-in badge, urgent action clock).
   warning: "#f08a6c",
 } as const;
 
 export const gradients = {
-  panel:
-    "linear-gradient(180deg, rgba(20,60,36,0.92) 0%, rgba(10,40,22,0.96) 100%)",
-  /** Slightly more saturated panel — used on the deal-choice + desktop board headers. */
-  panelBold:
-    "linear-gradient(180deg, rgba(20,60,36,0.95) 0%, rgba(10,40,22,0.98) 100%)",
-  /** Gold press-affordance fill for primary CTAs (Start, Ready, Play Again, browse-mode chips). */
+  panel: "linear-gradient(180deg, rgba(20,60,36,0.92) 0%, rgba(10,40,22,0.96) 100%)",
+  /** Panel fill for the action bar and lobby controls. */
+  panelBold: "linear-gradient(180deg, rgba(20,60,36,0.95) 0%, rgba(10,40,22,0.98) 100%)",
+  /** Gold press-affordance fill for primary CTAs (Start, Deal). */
   goldButton: `linear-gradient(180deg, ${colors.goldTop}, ${colors.gold})`,
 } as const;
 
-/**
- * Composed box-shadow strings used by raised gold buttons (Lobby Start, Ready
- * pill, page CTA, reveal play-again). The 3px rail underline + soft drop is
- * the signature press-affordance shape; centralized so a rail-color change
- * propagates everywhere.
- */
+/** The signature raised gold-button shadow (3px rail underline + soft drop). */
 export const shadows = {
   goldButton: `0 3px 0 #78350f, 0 6px 16px rgba(0,0,0,0.35)`,
 } as const;
@@ -54,11 +41,7 @@ export const overlays = {
   panelBorder: "rgba(201,165,74,0.28)",
 } as const;
 
-/**
- * Translucent fills used as ephemeral state backgrounds (selected, disabled,
- * win/loss flash). Names describe the *role*, not the hue — pick by what the
- * pixel means, not what color it happens to be.
- */
+/** Translucent neutral fills. */
 export const surfaces = {
   /** Hairline divider between sections. */
   dividerLine: "rgba(255,255,255,0.1)",
@@ -73,40 +56,4 @@ export const shades = {
 
 export const typography = {
   serif: "var(--font-playfair), Georgia, serif",
-} as const;
-
-/**
- * Tailwind-shaped color export — matches the legacy `colors` block in
- * tailwind.config.ts so the config can spread these directly into
- * `theme.extend.colors`.
- */
-export const tailwindColors = {
-  gold: {
-    DEFAULT: colors.gold,
-    bright: colors.goldBright,
-    top: colors.goldTop,
-  },
-  ink: colors.ink,
-  // Felt color scale comes from Tailwind's default green hues; we keep the
-  // explicit numeric scale here so the config doesn't need to chase Tailwind
-  // defaults.
-  felt: {
-    50: "#f0fdf4",
-    100: "#dcfce7",
-    200: "#bbf7d0",
-    300: "#86efac",
-    400: "#4ade80",
-    500: "#22c55e",
-    600: "#16a34a",
-    700: "#15803d",
-    800: "#166534",
-    900: "#14532d",
-    950: "#052e16",
-  },
-  danger: {
-    DEFAULT: colors.danger,
-  },
-  sub: colors.sub,
-  muted: colors.muted,
-  accent: colors.accent,
 } as const;

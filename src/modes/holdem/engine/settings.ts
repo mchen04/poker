@@ -33,7 +33,8 @@ export function defaultSettings(roomName = 'Private Felt'): RoomSettings {
     sevenTwo: {
       enabled: true,
       bounty: 25,
-      suitedBonus: 25
+      suitedBonus: 25,
+      requireShowdown: false
     },
     largeBetThresholdPct: 75,
     actionTimerSeconds: 30
@@ -73,7 +74,8 @@ export function sanitizeSettings(current: RoomSettings, patch: RoomSettingsPatch
     sevenTwo: {
       enabled: Boolean(patch.sevenTwo?.enabled ?? current.sevenTwo.enabled),
       bounty: clampInt(patch.sevenTwo?.bounty, 0, 1000000, current.sevenTwo.bounty),
-      suitedBonus: clampInt(patch.sevenTwo?.suitedBonus, 0, 1000000, current.sevenTwo.suitedBonus)
+      suitedBonus: clampInt(patch.sevenTwo?.suitedBonus, 0, 1000000, current.sevenTwo.suitedBonus),
+      requireShowdown: Boolean(patch.sevenTwo?.requireShowdown ?? current.sevenTwo.requireShowdown)
     },
     largeBetThresholdPct: clampInt(patch.largeBetThresholdPct, 1, 100, current.largeBetThresholdPct),
     actionTimerSeconds: clampInt(patch.actionTimerSeconds, 0, 600, current.actionTimerSeconds)

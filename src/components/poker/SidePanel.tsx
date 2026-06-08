@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientCommand, HostActionName, RoomPublicState } from "@/modes/holdem/shared/types";
 import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
-import { chips } from "@/lib/utils";
+import { chips, upDownColor, upDownLabel } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { HostSettings } from "./HostSettings";
 
@@ -77,10 +77,10 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: D.sub, fontSize: 10 }}>
             <span>{p.seat !== null ? `Seat ${p.seat + 1}` : "Unseated"} · {p.status}{p.ready ? " · ready" : ""}</span>
-            <span style={{ color: p.upDown > 0 ? D.accent : p.upDown < 0 ? D.danger : D.muted }}>{p.upDown >= 0 ? "+" : ""}{chips(p.upDown)}</span>
+            <span style={{ color: upDownColor(p.upDown) }}>{upDownLabel(p.upDown)}</span>
           </div>
           {isHost && p.chipRequest !== null && (
-            <button onClick={() => send({ type: "approveChips", playerId: p.id, amount: p.chipRequest ?? 0, reason: "host approved" })} style={btn(D.goldButton, "#2a1a08")}>
+            <button onClick={() => send({ type: "approveChips", playerId: p.id, amount: p.chipRequest ?? 0, reason: "host approved" })} style={btn(D.goldButton, D.ink)}>
               Approve {chips(p.chipRequest)} chips
             </button>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Card, HandPublic, PlayerPublic } from "@/modes/holdem/shared/types";
-import { chips } from "@/lib/utils";
+import { chips, upDownColor, upDownLabel } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { PokerCard } from "./Card";
 
@@ -115,8 +115,8 @@ export function Seat({
         ) : handName ? (
           <div style={{ fontSize: 9, fontWeight: 800, color: D.gold, letterSpacing: "0.04em" }}>{handName}</div>
         ) : (
-          <div style={{ fontSize: 9, fontWeight: 700, color: player.upDown > 0 ? D.accent : player.upDown < 0 ? D.danger : D.muted }}>
-            {player.upDown >= 0 ? "+" : ""}{chips(player.upDown)}
+          <div style={{ fontSize: 9, fontWeight: 700, color: upDownColor(player.upDown) }}>
+            {upDownLabel(player.upDown)}
           </div>
         )}
 

@@ -21,6 +21,7 @@ import {
   snapshot,
   timeoutCurrentActor,
 } from "../src/modes/holdem/engine/room";
+import { rateLimited } from "../src/modes/holdem/engine/access";
 import { ConnectionManager } from "./server/connectionManager";
 import { RoomStorage } from "./server/roomStorage";
 import { AlarmScheduler, EMPTY_ROOM_GRACE_MS } from "./server/alarmScheduler";
@@ -40,6 +41,8 @@ export default class PokerServer implements Party.Server {
   private conns = new ConnectionManager();
   /** connection id -> playerId binding (rebuilt on join; not persisted). */
   private connPlayer = new Map<string, string>();
+  /** Per-connection inbound-message timestamps for a coarse flood guard. */
+  private msgTimes = new Map<string, number[]>();
   private storageHelper: RoomStorage;
   private alarmScheduler: AlarmScheduler;
   private botController: BotController;
@@ -94,6 +97,7 @@ export default class PokerServer implements Party.Server {
 
   onClose(conn: Party.Connection): void {
     this.conns.remove(conn.id);
+    this.msgTimes.delete(conn.id);
     const playerId = this.connPlayer.get(conn.id);
     this.connPlayer.delete(conn.id);
     if (playerId) {
@@ -113,6 +117,10 @@ export default class PokerServer implements Party.Server {
   }
 
   onMessage(message: string, sender: Party.Connection): void {
+    // Coarse per-connection flood guard (per-action/chat limits live in the engine).
+    const times = this.msgTimes.get(sender.id) ?? [];
+    this.msgTimes.set(sender.id, times);
+    if (rateLimited(times, 50, 5000)) return;
     let raw: unknown;
     try {
       raw = JSON.parse(message);
@@ -133,7 +141,8 @@ export default class PokerServer implements Party.Server {
     this.alarmScheduler.invalidate();
     if (this.conns.size() === 0) {
       // No humans: once the grace window elapses, free storage; otherwise re-arm.
-      if (this.humansGoneSince !== null && Date.now() - this.humansGoneSince > EMPTY_ROOM_GRACE_MS) {
+      // Tolerance absorbs timer jitter so the grace-aligned alarm cleans up.
+      if (this.humansGoneSince !== null && Date.now() - this.humansGoneSince >= EMPTY_ROOM_GRACE_MS - 1000) {
         try {
           await this.room.storage.deleteAll();
         } catch {
@@ -275,6 +284,12 @@ export default class PokerServer implements Party.Server {
     if (!result.ok) {
       this.sendError(conn, result.error, command.reqId);
       return;
+    }
+    // If this connection was already bound to a different player (a re-join on
+    // the same socket), unbind the stale socket id from that player first.
+    const previousId = this.connPlayer.get(conn.id);
+    if (previousId && previousId !== result.playerId) {
+      this.poker.players.get(previousId)?.socketIds.delete(conn.id);
     }
     this.connPlayer.set(conn.id, result.playerId);
     attachSocket(this.poker, result.playerId, conn.id);

@@ -6,7 +6,6 @@
     "dev": "concurrently \"next dev\" \"partykit dev\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
     "party:dev": "partykit dev",
     "party:deploy": "partykit deploy",
     "typecheck": "tsc --noEmit -p tsconfig.json",

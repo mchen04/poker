@@ -74,7 +74,7 @@ export function PokerTable({
         }}
       >
         {hand ? (
-          <CommunityBoard hand={hand} compact={isMobile} />
+          <CommunityBoard hand={hand} bounty={publicState.settings.sevenTwo} compact={isMobile} />
         ) : (
           <div style={{ color: D.sub, fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase", fontSize: 12 }}>
             Waiting to deal…

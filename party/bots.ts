@@ -23,7 +23,7 @@ const MAINTAIN_DEBOUNCE_MS = 40;
 export class BotController {
   private meta: Record<string, BotMeta> = {};
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
-  private maintainScheduled = false;
+  private maintainTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private opts: BotControllerOptions) {}
 
@@ -76,10 +76,9 @@ export class BotController {
   /** Called after every broadcast: housekeeping + schedule the acting bot. */
   notifyStateChanged(): void {
     const room = this.opts.getRoom();
-    if (this.maintainBots(room) && !this.maintainScheduled) {
-      this.maintainScheduled = true;
-      setTimeout(() => {
-        this.maintainScheduled = false;
+    if (this.maintainBots(room) && this.maintainTimer === null) {
+      this.maintainTimer = setTimeout(() => {
+        this.maintainTimer = null;
         this.opts.onChanged();
       }, MAINTAIN_DEBOUNCE_MS);
     }
@@ -144,5 +143,9 @@ export class BotController {
   dispose(): void {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
+    if (this.maintainTimer) {
+      clearTimeout(this.maintainTimer);
+      this.maintainTimer = null;
+    }
   }
 }

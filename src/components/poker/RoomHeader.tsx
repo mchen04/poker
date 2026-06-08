@@ -5,6 +5,9 @@ import type { RoomPublicState } from "@/modes/holdem/shared/types";
 import { END_GAME_CONFIRM_MS } from "@/lib/constants";
 import { D } from "@/lib/theme";
 
+/** How long the "Copied!" invite confirmation shows before reverting. */
+const COPIED_RESET_MS = 1500;
+
 export function RoomHeader({
   publicState,
   code,
@@ -42,7 +45,7 @@ export function RoomHeader({
     navigator.clipboard?.writeText(window.location.href).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setTimeout(() => setCopied(false), COPIED_RESET_MS);
       },
       () => undefined
     );

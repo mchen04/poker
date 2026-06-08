@@ -91,7 +91,7 @@ export function BettingControl({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legal, canSize, isLargeSize, target]);
+  }, [legal, canSize, isLargeSize, target, armed]);
 
   const presets: Array<{ label: string; value: number }> = canSize
     ? [
@@ -106,7 +106,7 @@ export function BettingControl({
     : [];
 
   const sizeLabel = legal.canRaise ? "Raise to" : "Bet";
-  const fillPct = maxTarget > minTarget ? ((target - minTarget) / (maxTarget - minTarget)) * 100 : 0;
+  const fillPct = maxTarget > minTarget ? Math.max(0, Math.min(100, ((target - minTarget) / (maxTarget - minTarget)) * 100)) : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -144,7 +144,8 @@ export function BettingControl({
               value={Math.round(target)}
               min={minTarget}
               max={maxTarget}
-              onChange={(e) => setTarget(clamp(Number(e.target.value) || 0, minTarget, maxTarget))}
+              onChange={(e) => setTarget(Number(e.target.value) || 0)}
+              onBlur={() => setTarget((t) => clamp(t, minTarget, maxTarget))}
               aria-label="Bet amount"
               style={{
                 flex: 1,
@@ -221,7 +222,7 @@ function ActionButton({
       : tone === "confirm"
       ? "linear-gradient(180deg,#f0a23c,#d97f1c)"
       : "rgba(255,255,255,0.09)";
-  const color = tone === "gold" || tone === "confirm" ? "#2a1a08" : "#fff";
+  const color = tone === "gold" || tone === "confirm" ? D.ink : "#fff";
   return (
     <button
       onClick={onClick}

@@ -846,7 +846,8 @@ function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): 
   const total = [...hand.participants.values()].reduce((sum, entry) => sum + entry.committedThisHand, 0);
   player.stack += total;
   const awards = [`${player.name} won ${total} without showdown.`];
-  if (room.settings.sevenTwo.enabled) applySevenTwoBounty(room, [winner], awards);
+  // Skip the 7-2 bounty on uncontested wins when the host requires showdown.
+  if (room.settings.sevenTwo.enabled && !room.settings.sevenTwo.requireShowdown) applySevenTwoBounty(room, [winner], awards);
   hand.phase = 'complete';
   assignTurn(hand, null);
   hand.winningSeats = [winner.seat];

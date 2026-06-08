@@ -91,7 +91,7 @@ export function LobbyControls({
               fontWeight: 900,
               fontSize: 14,
               background: canStart ? D.goldButton : "rgba(255,255,255,0.06)",
-              color: canStart ? "#2a1a08" : "rgba(255,255,255,0.3)",
+              color: canStart ? D.ink : "rgba(255,255,255,0.3)",
               border: "none",
               boxShadow: canStart ? shadows.goldButton : "none",
               cursor: canStart ? "pointer" : "not-allowed",
