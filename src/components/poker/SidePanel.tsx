@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ClientCommand, HostActionName, RoomPublicState } from "@/modes/holdem/shared/types";
 import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
 import { chips, upDownColor, upDownLabel } from "@/lib/utils";
-import { D } from "@/lib/theme";
+import { D, fieldStyle } from "@/lib/theme";
 import { HostSettings } from "./HostSettings";
 import { ChromeButton } from "./ChromeButton";
 
@@ -118,7 +118,7 @@ function PlayersTab({ publicState, myId, isHost, send }: { publicState: RoomPubl
             step={publicState.settings.bigBlind}
             value={amount}
             onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-            style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 7, color: D.goldBright, fontWeight: 800, textAlign: "center", padding: "5px" }}
+            style={{ ...fieldStyle, flex: 1, minWidth: 0, textAlign: "center", padding: "5px" }}
           />
           <button disabled={amount <= 0} onClick={() => send({ type: "requestChips", amount, reason: "rebuy" })} style={btn("rgba(255,255,255,0.08)", D.goldBright)}>
             {publicState.settings.selfServiceChips ? "Add chips" : "Request chips"}
@@ -219,7 +219,7 @@ function ChatTab({ publicState, myId, send }: { publicState: RoomPublicState; my
           onKeyDown={(e) => e.key === "Enter" && submit()}
           maxLength={240}
           placeholder="Message…"
-          style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 8, color: "#fff", padding: "6px 8px", outline: "none" }}
+          style={{ ...fieldStyle, flex: 1, minWidth: 0, borderRadius: 8, color: "#fff", fontWeight: 400, padding: "6px 8px", outline: "none" }}
         />
         <button onClick={submit} style={btn("rgba(255,255,255,0.08)", D.goldBright)}>Send</button>
       </div>
@@ -248,14 +248,14 @@ function HostChipAdjust({ playerId, defaultAmount, send }: { playerId: string; d
         value={amt}
         onChange={(e) => setAmt(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
         aria-label="Chip adjustment amount"
-        style={{ width: 60, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.goldBright, fontWeight: 800, textAlign: "center", padding: "3px", fontSize: 11 }}
+        style={{ ...fieldStyle, width: 60, borderRadius: 6, textAlign: "center", padding: "3px", fontSize: 11 }}
       />
       <input
         value={why}
         placeholder="reason"
         onChange={(e) => setWhy(e.target.value)}
         aria-label="Chip adjustment reason"
-        style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.text, fontSize: 11, padding: "3px 6px" }}
+        style={{ ...fieldStyle, flex: 1, minWidth: 0, borderRadius: 6, color: D.text, fontWeight: 400, fontSize: 11, padding: "3px 6px" }}
       />
       <MiniBtn label="+ Chips" onClick={() => apply(1)} />
       <MiniBtn label="− Chips" tone="danger" onClick={() => apply(-1)} />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ClientCommand, RoomSettings } from "@/modes/holdem/shared/types";
 import { ALL_CUSTOM_MODES, modeLabel } from "@/modes/holdem/shared/modes";
-import { D } from "@/lib/theme";
+import { D, fieldStyle } from "@/lib/theme";
 
 export function HostSettings({
   settings,
@@ -171,7 +171,7 @@ function Num({ label, value, disabled, onChange }: { label: string; value: numbe
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
-        style={{ width: 80, background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.goldBright, fontWeight: 800, textAlign: "right", padding: "3px 6px" }}
+        style={{ ...fieldStyle, width: 80, borderRadius: 6, textAlign: "right", padding: "3px 6px" }}
       />
     </Row>
   );
@@ -206,7 +206,7 @@ function Pick({ label, value, options, disabled, onChange }: { label: string; va
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${D.panelBorder}`, borderRadius: 6, color: D.goldBright, fontWeight: 700, padding: "3px 6px" }}
+        style={{ ...fieldStyle, borderRadius: 6, fontWeight: 700, padding: "3px 6px" }}
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>{opt}</option>

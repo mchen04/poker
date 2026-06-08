@@ -145,19 +145,25 @@ export default class PokerServer implements Party.Server {
     // next schedule() actually re-arms it.
     this.alarmScheduler.invalidate();
     if (this.conns.size() === 0) {
-      // No humans: once the grace window elapses, free storage; otherwise re-arm.
-      // emptySince is persisted, so this survives hibernation. Tolerance absorbs
-      // timer jitter so the grace-aligned alarm cleans up rather than re-arming.
+      // No humans. emptySince is persisted (survives hibernation); if the room
+      // was reloaded empty with no prior onClose, start the grace clock now so
+      // it still gets cleaned up.
+      if (this.poker.emptySince === null) {
+        this.poker.emptySince = Date.now();
+        void this.persist();
+      }
       const emptySince = this.poker.emptySince;
-      if (emptySince !== null && Date.now() - emptySince >= EMPTY_ROOM_GRACE_MS - 1000) {
+      // Tolerance absorbs timer jitter so the grace-aligned alarm cleans up.
+      if (Date.now() - emptySince >= EMPTY_ROOM_GRACE_MS - 1000) {
         try {
           await this.room.storage.deleteAll();
         } catch {
           /* ignore */
         }
       } else {
+        // Re-arm at the actual cleanup deadline, not a fresh full grace from now.
         try {
-          await this.room.storage.setAlarm(Date.now() + EMPTY_ROOM_GRACE_MS);
+          await this.room.storage.setAlarm(emptySince + EMPTY_ROOM_GRACE_MS);
         } catch {
           /* ignore */
         }
@@ -357,9 +363,10 @@ export default class PokerServer implements Party.Server {
    * Guarantee the host badge sits on a connected human whenever possible. Runs
    * after a disconnect and after each join, so a room left leaderless (host
    * gone, e.g. after a DO reload where their onClose never fired) is rescued by
-   * the next connected human. Never assigns to a bot; if the host is connected
-   * or no human is available, it's a no-op (the original host reclaims it on
-   * reconnect via sessionToken).
+   * the next connected human. Never assigns to a bot. If the host is still
+   * connected, or no human is available, it's a no-op. Note: once the badge
+   * migrates it stays with the new holder — a returning founder does NOT
+   * automatically reclaim it (they can be re-granted via transferHost).
    */
   private ensureConnectedHost(): void {
     const room = this.poker;

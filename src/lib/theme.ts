@@ -32,3 +32,12 @@ export const feltSurface = {
   backgroundRepeat: "repeat" as const,
   backgroundSize: "256px 256px",
 };
+
+/** Shared dark form-field surface — inputs spread this, then add their own layout. */
+export const fieldStyle = {
+  background: "rgba(0,0,0,0.4)",
+  border: `1px solid ${overlays.panelBorder}`,
+  borderRadius: 7,
+  color: colors.goldBright,
+  fontWeight: 800,
+};

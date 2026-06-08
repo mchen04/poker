@@ -899,9 +899,14 @@ function awardPotShares(
   if (winnerSeatNumbers.length === 0 || payable <= 0) return;
   const share = Math.floor(payable / winnerSeatNumbers.length);
   let odd = payable % winnerSeatNumbers.length;
+  // Odd chips go to the winning seat(s) first to the left of the button (TDA
+  // rule), not the lowest absolute seat index.
+  const seatCount = room.seats.length;
+  const button = room.hand?.buttonSeat ?? 0;
+  const fromButton = (seat: number) => (seat - button - 1 + seatCount) % seatCount;
   winnerSeatNumbers
     .slice()
-    .sort((a, b) => a - b)
+    .sort((a, b) => fromButton(a) - fromButton(b))
     .forEach((seat) => {
       const participant = room.hand?.participants.get(seat);
       const player = participant ? room.players.get(participant.playerId) : null;

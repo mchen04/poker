@@ -17,7 +17,7 @@ export type Rank =
 export type Card = `${Rank}${Suit}`;
 
 export type ChipMode = 'strict' | 'casual';
-export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | 'busted';
+export type SeatStatus = 'seated' | 'sitting_out' | 'disconnected' | 'busted';
 export type HandPhase = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
 export type Variant = 'holdem' | 'omaha4';
 export type CustomPermission = 'creator_only' | 'button' | 'everyone_with_cooldown';

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HandPublic, LegalActions, PlayerAction, PlayerPublic } from "@/modes/holdem/shared/types";
 import { chips, clamp } from "@/lib/utils";
-import { D } from "@/lib/theme";
+import { D, fieldStyle } from "@/lib/theme";
 
 /** How long a large-bet/all-in confirm stays armed before resetting (ms). */
 const ARM_CONFIRM_MS = 4000;
@@ -79,6 +79,7 @@ export function BettingControl({
   // Hotkeys.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.repeat) return; // holding a hotkey must not spam the action/arm
       const el = e.target as HTMLElement | null;
       if (el && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) return;
       const k = e.key.toLowerCase();
@@ -145,15 +146,13 @@ export function BettingControl({
               min={minTarget}
               max={maxTarget}
               onChange={(e) => setTarget(e.target.value === "" ? minTarget : Number(e.target.value))}
-              onBlur={() => setTarget((t) => clamp(t, minTarget, maxTarget))}
+              onBlur={() => setTarget((t) => clamp(Number.isFinite(t) ? t : minTarget, minTarget, maxTarget))}
               aria-label="Bet amount"
               style={{
+                ...fieldStyle,
                 flex: 1,
                 minWidth: 0,
-                background: "rgba(0,0,0,0.4)",
-                border: `1px solid ${D.panelBorder}`,
                 borderRadius: 8,
-                color: D.goldBright,
                 fontWeight: 900,
                 fontSize: 18,
                 textAlign: "center",
