@@ -2,14 +2,8 @@
  * Single source of truth for visual design tokens — colors, gradients, and
  * typography that the felt/gold chrome depends on.
  *
- * Consumed by:
- *   - tailwind.config.ts          (color palette in `theme.extend.colors`)
- *   - src/lib/theme.ts            (legacy `D` re-exported from here)
- *   - src/lib/chipColors.ts       (rank chip palette)
- *   - any ad-hoc inline-style use
- *
- * Mode-agnostic by design: this is the shared house style every gamemode
- * inherits. Mode-specific accents (e.g. card faces) belong in the mode folder.
+ * Consumed by tailwind.config.ts (theme.extend.colors), src/lib/theme.ts (the
+ * flat `D` alias), and ad-hoc inline styles across the felt/gold chrome.
  */
 
 export const colors = {
@@ -32,15 +26,8 @@ export const colors = {
   // Status accents
   accent: "#2fb873",
   danger: "#c06060",
-  // Warning / secondary-emphasis (used by "opt-in penalty", "right neighbor",
-  // sacrificed/contributed card borders, table-picks vote header).
+  // Warning / secondary-emphasis (all-in badge, urgent action clock).
   warning: "#f08a6c",
-
-  // Rank chip palette — all ranks share the neutral "mid" styling. The
-  // top/bottom variants were retired when chipColors.ts unified the palette.
-  rankMidBg: "#4a5568",
-  rankMidBorder: "#8a9ab0",
-  rankMidText: "#ffffff",
 } as const;
 
 export const gradients = {
@@ -79,7 +66,6 @@ export const surfaces = {
   disabledBg: "rgba(0,0,0,0.22)",
   subtleBorder: "rgba(255,255,255,0.08)",
   neutralFaint: "rgba(255,255,255,0.06)",
-  dealChoicePanelBg: "rgba(10,40,22,0.9)",
   goldMid: "rgba(201,165,74,0.2)",
   dividerLine: "rgba(255,255,255,0.1)",
   panelDeep: "rgba(0,0,0,0.28)",
