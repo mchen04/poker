@@ -48,10 +48,8 @@ export function mergeMode(baseVariant: Variant, queued: QueuedCustomMode | null)
     variant: queued?.variant ?? baseVariant,
     modifiers: {
       bombPot: queued?.modifiers.bombPot,
-      doubleBoard: queued?.modifiers.doubleBoard,
       showOne: queued?.modifiers.showOne,
-      sevenTwo: queued?.modifiers.sevenTwo,
-      mandatoryStraddle: queued?.modifiers.mandatoryStraddle
+      sevenTwo: queued?.modifiers.sevenTwo
     }
   };
 }

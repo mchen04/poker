@@ -352,6 +352,33 @@ describe('room command model', () => {
     expect(hostAction(room, host, { action: 'transferHost', playerId: players[1].id }).ok).toBe(false);
   });
 
+  it('requires the acting host to be an active table player before transfer', () => {
+    const created = createRoom('Host', 'Transfer Actor');
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error('create failed');
+    const room = getRoom(created.code)!;
+    const host = playerInRoom(room, created.playerId)!;
+    host.socketIds.add('transfer-host');
+    const joined = joinRoom(room.code, 'Ari');
+    expect(joined.ok).toBe(true);
+    if (!joined.ok) throw new Error('join failed');
+    const ari = playerInRoom(room, joined.playerId)!;
+    ari.socketIds.add('transfer-ari');
+    expect(sit(room, ari, 1).ok).toBe(true);
+    expect(setReady(room, ari, true).ok).toBe(true);
+    expect(hostAction(room, host, { action: 'transferHost', playerId: ari.id }).ok).toBe(false);
+    expect(sit(room, host, 0).ok).toBe(true);
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: host.id }).ok).toBe(true);
+    expect(hostAction(room, host, { action: 'transferHost', playerId: ari.id }).ok).toBe(false);
+    expect(hostAction(room, host, { action: 'forceSitOut', playerId: host.id, value: false }).ok).toBe(true);
+    expect(approveChips(room, host, host.id, -1000, 'felted host').ok).toBe(true);
+    expect(hostAction(room, host, { action: 'transferHost', playerId: ari.id }).ok).toBe(false);
+    expect(approveChips(room, host, host.id, 1000, 'restore host').ok).toBe(true);
+    host.socketIds.clear();
+    host.status = 'disconnected';
+    expect(hostAction(room, host, { action: 'transferHost', playerId: ari.id }).ok).toBe(false);
+  });
+
   it('rejects custom queues from spectators and forced sit-out players', () => {
     const { room, host, players } = setupThreePlayers();
     const spectatorJoin = joinRoom(room.code, 'Rail', undefined, true);

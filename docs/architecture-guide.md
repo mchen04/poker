@@ -11,7 +11,7 @@
 
 ## Server Authority
 
-The server owns deck order, shuffling, private cards, board cards, burns/draw state, turn order, legal actions, chip movement, pots, bounties, and showdown. Clients never submit card or pot results.
+The server owns deck order, shuffling, private cards, board cards, turn order, legal actions, chip movement, pots, bounties, and showdown. Clients never submit card or pot results.
 
 Every meaningful change flows through a command handler and appends an audit entry. Stale action nonces and duplicate submissions are rejected.
 

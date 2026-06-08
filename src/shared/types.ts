@@ -17,8 +17,8 @@ export type Rank =
 export type Card = `${Rank}${Suit}`;
 
 export type ChipMode = 'strict' | 'casual';
-export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | 'waiting_bb' | 'busted';
-export type HandPhase = 'idle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
+export type SeatStatus = 'empty' | 'seated' | 'sitting_out' | 'disconnected' | 'busted';
+export type HandPhase = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'complete';
 export type Variant = 'holdem' | 'omaha4';
 export type CustomPermission = 'creator_only' | 'button' | 'everyone_once_per_orbit';
 export type CustomModeName = 'holdem' | 'omaha4' | 'bomb_pot' | 'show_one' | 'seven_two';
@@ -116,10 +116,8 @@ export interface QueuedCustomMode {
   variant?: Variant;
   modifiers: {
     bombPot?: boolean;
-    doubleBoard?: boolean;
     showOne?: boolean;
     sevenTwo?: boolean;
-    mandatoryStraddle?: boolean;
   };
   label: string;
 }
@@ -153,7 +151,7 @@ export interface RoomPublicState {
   code: string;
   createdAt: number;
   hostId: string;
-  lifecycle: 'lobby' | 'playing' | 'paused' | 'ended';
+  lifecycle: 'lobby' | 'playing' | 'ended';
   settings: RoomSettings;
   players: PlayerPublic[];
   seats: Array<string | null>;
@@ -171,7 +169,6 @@ export interface PrivateState {
   sessionToken: string;
   holeCards: Card[];
   legalActions: LegalActions;
-  mustConfirmLargeBet: boolean;
   reconnectTokenValid: boolean;
 }
 

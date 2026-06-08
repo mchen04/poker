@@ -56,6 +56,10 @@ export function requireHostTransferTarget(player: PlayerInternal): AccessError |
   return requireConnectedSeatedPlayerWithChips(player, 'Host can only transfer to a connected seated player with chips.');
 }
 
+export function requireHostTransferActor(player: PlayerInternal): AccessError | null {
+  return requireConnectedSeatedPlayerWithChips(player, 'Host must be a connected seated player with chips to transfer ownership.');
+}
+
 export function reconcileStackStatus(player: PlayerInternal): void {
   if (player.spectator) return;
   if (player.stack <= 0) {

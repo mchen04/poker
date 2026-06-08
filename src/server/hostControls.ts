@@ -1,5 +1,5 @@
 import type { SocketResult } from '../shared/types';
-import { requireHostTransferTarget } from './access';
+import { requireHostTransferActor, requireHostTransferTarget } from './access';
 import type { PlayerInternal, RoomInternal } from './room';
 
 export type HostActionPayload = {
@@ -36,6 +36,8 @@ export function hostActionWithSupport(support: HostSupport, room: RoomInternal, 
     return { ok: false, error: 'Finish the active hand before changing seats, sit-out state, or host ownership.' };
   }
   if (payload.action === 'transferHost') {
+    const actorError = requireHostTransferActor(host);
+    if (actorError) return actorError;
     const transferError = requireHostTransferTarget(target);
     if (transferError) return transferError;
     host.isHost = false;

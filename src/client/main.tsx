@@ -295,8 +295,7 @@ function TableView({
           <strong>{hand.pots.reduce((sum, item) => sum + item.amount, 0)} pot</strong>
           <small>{hand.phase} · hand {hand.number}</small>
         </div>
-        <Board cards={hand.board} label={hand.modifiers.doubleBoard ? 'Board 1' : 'Board'} />
-        {hand.modifiers.doubleBoard && <Board cards={hand.board2} label="Board 2" />}
+        <Board cards={hand.board} label="Board" />
         <div className="seat-ring">
           {room.players.filter((player) => player.seat !== null).map((player) => (
             <SeatPanel key={player.id} player={player} active={hand.currentTurnSeat === player.seat} me={player.id === me?.id} />

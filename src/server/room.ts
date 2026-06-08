@@ -145,7 +145,6 @@ export function privateState(room: RoomInternal, player: PlayerInternal | null):
     sessionToken: player.sessionToken,
     holeCards: participant?.holeCards ?? [],
     legalActions,
-    mustConfirmLargeBet: false,
     reconnectTokenValid: true
   };
 }
@@ -746,9 +745,6 @@ function maybeAutoAdvanceOrAward(room: RoomInternal): void {
       hand.phase = phase;
       dealStreet(hand, phase);
     }
-    if (hand.modifiers.doubleBoard) {
-      while (hand.board2.length < 5) dealBoard2Card(hand);
-    }
     showdown(room);
     return;
   }
@@ -785,18 +781,11 @@ function advanceStreet(room: RoomInternal, hand: HandInternal): void {
 function dealStreet(hand: HandInternal, phase: HandPhase): void {
   if (phase === 'flop' && hand.board.length === 0) {
     hand.board.push(...hand.deck.splice(0, 3));
-    if (hand.modifiers.doubleBoard) hand.board2.push(...hand.deck.splice(0, 3));
   } else if (phase === 'turn' && hand.board.length === 3) {
     hand.board.push(hand.deck.shift() as Card);
-    if (hand.modifiers.doubleBoard) dealBoard2Card(hand);
   } else if (phase === 'river' && hand.board.length === 4) {
     hand.board.push(hand.deck.shift() as Card);
-    if (hand.modifiers.doubleBoard) dealBoard2Card(hand);
   }
-}
-
-function dealBoard2Card(hand: HandInternal): void {
-  hand.board2.push(hand.deck.shift() as Card);
 }
 
 function awardWithoutShowdown(room: RoomInternal, winner: ParticipantInternal): void {
@@ -829,17 +818,8 @@ function showdown(room: RoomInternal): void {
   hand.pots.forEach((pot) => {
     const contenders = live.filter((entry) => pot.eligibleSeatNumbers.includes(entry.seat));
     const boardWinners = winnerSeats(rankPlayers(hand.variant, contenders, hand.board));
-    if (hand.modifiers.doubleBoard && hand.board2.length >= 5) {
-      boardWinners.forEach((seat) => winningSeats.add(seat));
-      const secondWinners = winnerSeats(rankPlayers(hand.variant, contenders, hand.board2));
-      secondWinners.forEach((seat) => winningSeats.add(seat));
-      const firstHalf = Math.floor(pot.amount / 2);
-      awardPotShares(room, firstHalf, boardWinners, `${pot.label} board 1`, awards);
-      awardPotShares(room, pot.amount - firstHalf, secondWinners, `${pot.label} board 2`, awards);
-    } else {
-      boardWinners.forEach((seat) => winningSeats.add(seat));
-      awardPotShares(room, pot.amount, boardWinners, pot.label, awards);
-    }
+    boardWinners.forEach((seat) => winningSeats.add(seat));
+    awardPotShares(room, pot.amount, boardWinners, pot.label, awards);
   });
 
   if (hand.modifiers.sevenTwo || room.settings.sevenTwo.enabled) {
