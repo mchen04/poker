@@ -62,6 +62,7 @@ function fail(message: string): { ok: false; error: string } {
 }
 
 const joinAttempts = new Map<string, number[]>();
+const createAttempts = new Map<string, number[]>();
 
 const customModes = ['holdem', 'omaha4', 'bomb_pot', 'show_one', 'seven_two'] as const;
 const settingsSchema = z
@@ -153,6 +154,7 @@ function safeHandler<T>(
 
 io.on('connection', (socket) => {
   socket.on('createRoom', safeHandler(schemas.createRoom, (payload, ack) => {
+    if (tooManyAttempts(createAttempts, socket.handshake.address ?? socket.id, 10, 60_000)) return ack(fail('Too many room creation attempts. Try again shortly.'));
     const result = createRoom(payload?.name ?? '', payload?.roomName);
     if (!result.ok) return ack(result);
     const room = getRoom(result.code);
@@ -166,7 +168,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('joinRoom', safeHandler(schemas.joinRoom, (payload, ack) => {
-    if (tooManyJoinAttempts(socket.handshake.address ?? socket.id)) return ack(fail('Too many join attempts. Try again shortly.'));
+    if (tooManyAttempts(joinAttempts, socket.handshake.address ?? socket.id, 20, 30_000)) return ack(fail('Too many join attempts. Try again shortly.'));
     const result = joinRoom(payload.code, payload.name, payload.sessionToken, payload.spectator);
     if (!result.ok) return ack(result);
     const room = getRoom(result.code);
@@ -276,13 +278,13 @@ function withPlayer<T extends SocketResult>(
   if (shouldEmit || result.ok) emitRoom(code);
 }
 
-function tooManyJoinAttempts(key: string): boolean {
+function tooManyAttempts(store: Map<string, number[]>, key: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
-  const attempts = joinAttempts.get(key) ?? [];
+  const attempts = store.get(key) ?? [];
   attempts.push(now);
-  while (attempts.length && attempts[0] < now - 30_000) attempts.shift();
-  joinAttempts.set(key, attempts);
-  return attempts.length > 20;
+  while (attempts.length && attempts[0] < now - windowMs) attempts.shift();
+  store.set(key, attempts);
+  return attempts.length > limit;
 }
 
 const port = Number(process.env.PORT ?? 3001);

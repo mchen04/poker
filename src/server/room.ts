@@ -194,6 +194,8 @@ function findByToken(room: RoomInternal, sessionToken?: string): PlayerInternal 
 export function createRoom(nameInput: string, roomNameInput?: string): SocketResult<{ code: string; playerId: string; sessionToken: string }> {
   const name = cleanName(nameInput);
   if (!name) return { ok: false, error: 'Enter a display name.' };
+  cleanupEmptyRooms();
+  if (rooms.size >= 500) return { ok: false, error: 'Server room limit reached. Try again later.' };
   let code = makeCode();
   while (rooms.has(code)) code = makeCode();
 
@@ -319,8 +321,9 @@ function timeoutDisconnectedParticipant(room: RoomInternal, player: PlayerIntern
   if (!hand || hand.phase === 'complete' || player.seat === null) return;
   const participant = hand.participants.get(player.seat);
   if (!participant || participant.folded || participant.allIn) return;
+  if (hand.currentTurnSeat !== player.seat) return;
 
-  if (hand.currentTurnSeat === player.seat && legalActionsFor(room, player).canCheck) {
+  if (legalActionsFor(room, player).canCheck) {
     participant.acted = true;
     audit(room, 'timeout.check', `${player.name} disconnected and timed out to check`, player.id);
   } else {
@@ -329,10 +332,17 @@ function timeoutDisconnectedParticipant(room: RoomInternal, player: PlayerIntern
     participant.timedOut = true;
     audit(room, 'timeout.fold', `${player.name} disconnected and timed out to fold`, player.id);
   }
-
-  if (hand.currentTurnSeat === player.seat) hand.actionNonce += 1;
+  hand.actionNonce += 1;
   updatePots(hand);
   maybeAutoAdvanceOrAward(room);
+}
+
+function cleanupEmptyRooms(): void {
+  const now = Date.now();
+  rooms.forEach((room, code) => {
+    const empty = [...room.players.values()].every((player) => player.socketIds.size === 0);
+    if (empty && now - room.createdAt > 60 * 60 * 1000) rooms.delete(code);
+  });
 }
 
 export function getRoom(code: string): RoomInternal | undefined {

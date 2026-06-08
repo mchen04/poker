@@ -14,3 +14,4 @@ Estimated loop cost: fresh-context audits plus main-session fixes, roughly $10-$
 | 5 | BLOCK | 0/1/0 | 1 | +5 | pass | excluded disconnected seated players from new hands and connected bot/test sessions explicitly |
 | 6 | BLOCK | 1/4/0 | 1 | +54 | pass | fixed active public deck leak, all-in min-raise, CSPRNG room codes, join attempt limiting, spectator chip edits, and disconnected host transfer |
 | 7 | BLOCK | 0/4/0 | 1 | +112 | pass | fixed short all-in no-reopen, disconnect timeout fold/check, kicked join capacity, and explicit public hand projection |
+| 8 | BLOCK | 0/2/0 | 1 | +22 | pass | fixed non-current disconnect turn preservation and create-room throttling/room cap cleanup |

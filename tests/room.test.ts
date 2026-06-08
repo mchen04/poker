@@ -109,6 +109,16 @@ describe('room command model', () => {
     expect(room.hand?.currentTurnSeat).not.toBe(actor.seat);
   });
 
+  it('does not advance the turn when a non-current player disconnects mid-hand', () => {
+    const { room, host } = setupThreePlayers();
+    expect(startGame(room, host).ok).toBe(true);
+    const currentTurn = room.hand!.currentTurnSeat;
+    const nonCurrent = [...room.players.values()].find((player) => player.seat !== null && player.seat !== currentTurn)!;
+    const socketId = [...nonCurrent.socketIds][0];
+    detachSocket(socketId);
+    expect(room.hand?.currentTurnSeat).toBe(currentTurn);
+  });
+
   it('queues an MVP custom mode and audit logs chip requests', () => {
     const { room, host } = setupThreePlayers();
     const queued = queueMode(room, host, 'omaha4');
