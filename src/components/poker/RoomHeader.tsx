@@ -32,6 +32,7 @@ export function RoomHeader({
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seated = publicState.players.filter((p) => p.seat !== null).length;
+  const s = publicState.settings;
 
   // Clear pending confirm/copied timers on unmount (avoids setState-after-unmount).
   useEffect(
@@ -79,11 +80,19 @@ export function RoomHeader({
         flexShrink: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 11, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
         <span style={{ fontFamily: D.serif, fontWeight: 900, fontSize: 18, color: D.goldBright, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{publicState.settings.roomName}</span>
         <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.15em", color: D.gold, flexShrink: 0 }}>{code}</span>
-        <span style={{ fontSize: 11, color: D.sub, whiteSpace: "nowrap", flexShrink: 0 }}>
-          {seated} seated · {publicState.lifecycle}
+        {/* Secondary info — folds away on narrow headers so name + code + actions never collide. */}
+        <span className="header-meta" style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+          <span style={{ fontSize: 11, color: D.sub, whiteSpace: "nowrap", flexShrink: 0 }}>
+            {seated} seated · {publicState.lifecycle}
+          </span>
+          <span aria-hidden style={{ width: 1, height: 18, background: "rgba(201,165,74,0.28)", flexShrink: 0 }} />
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: D.sub, whiteSpace: "nowrap", flexShrink: 0 }}>
+            <span style={{ color: D.gold, fontWeight: 800 }}>Blinds {s.smallBlind}/{s.bigBlind}</span>
+            {s.ante > 0 && <> · Ante {s.ante}</>}
+          </span>
         </span>
       </div>
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>

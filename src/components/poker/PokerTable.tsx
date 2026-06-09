@@ -4,18 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import type { PrivateState, RoomPublicState } from "@/modes/holdem/shared/types";
 import { getSeatPosition, computeTableLayout } from "@/lib/seatLayout";
 import { D } from "@/lib/theme";
-import { Seat } from "./Seat";
+import { Seat, EmptySeat } from "./Seat";
 import { CommunityBoard } from "./CommunityBoard";
 
-/** The felt: elliptical seat ring (self pinned to bottom) + center board/pot. */
+/**
+ * The felt: a fixed ring of `maxSeats` chairs (your own pinned to bottom-center)
+ * around the central board/pot. Occupied chairs show the player; open chairs are
+ * click-to-sit when seat changes are allowed (lobby or between hands), so seating
+ * happens right on the table instead of in a menu.
+ */
 export function PokerTable({
   publicState,
   privateState,
   myId,
+  onSit,
 }: {
   publicState: RoomPublicState;
   privateState: PrivateState | null;
   myId: string | null;
+  onSit: (seat: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 900, h: 600 });
@@ -34,18 +41,29 @@ export function PokerTable({
   const isMobile = Math.min(dims.w, dims.h) < 500;
   const isLandscape = dims.w > dims.h;
   const hand = publicState.hand;
+  const maxSeats = publicState.settings.maxSeats;
 
-  const seated = publicState.players
-    .filter((p) => p.seat !== null)
-    .sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0));
-  const selfIndex = Math.max(0, seated.findIndex((p) => p.id === myId));
+  const me = publicState.players.find((p) => p.id === myId);
+  const mySeat = me?.seat ?? null;
+  // The viewer's own seat anchors the bottom; default to seat 0 before they sit.
+  const anchorSeat = mySeat ?? 0;
+
+  // Seat changes follow the same rule the server enforces: allowed unless the
+  // room has ended or a hand is in progress, and never for spectators / sat-out.
+  const activeHand = hand !== null && hand.phase !== "complete";
+  const canChooseSeat =
+    publicState.lifecycle !== "ended" && !activeHand && Boolean(me) && !me!.spectator && !me!.forcedSitOut && !me!.banned;
+
   const { xRadius, yRadius, opponentScale } = computeTableLayout({
-    playerCount: Math.max(seated.length, 1),
+    seatCount: maxSeats,
     isMobile,
     isLandscape,
     width: dims.w,
   });
   const holeCount = hand?.variant === "omaha4" ? 4 : 2;
+  const playerBySeat = new Map(
+    publicState.players.filter((p) => p.seat !== null).map((p) => [p.seat as number, p])
+  );
   const revealBySeat = new Map((hand?.revealedHands ?? []).map((r) => [r.seat, r]));
 
   return (
@@ -54,7 +72,7 @@ export function PokerTable({
       <div
         style={{
           position: "absolute",
-          inset: isMobile ? "5% 3%" : "9% 7%",
+          inset: isMobile ? "5% 3%" : "8% 6%",
           borderRadius: "50% / 46%",
           background: "radial-gradient(ellipse at 50% 38%, #166b3e 0%, #0a3a20 68%, #062716 100%)",
           border: "7px solid #5a3d18",
@@ -83,35 +101,40 @@ export function PokerTable({
         )}
       </div>
 
-      {/* Seats */}
-      {seated.map((player, i) => {
-        const pos = getSeatPosition(i, seated.length, selfIndex, xRadius, yRadius);
-        const isMe = player.id === myId;
-        const reveal = player.seat !== null ? revealBySeat.get(player.seat) : undefined;
-        const inHand = hand !== null && player.seat !== null && hand.eligibleSeatNumbers.includes(player.seat);
+      {/* Fixed ring — one slot per table seat */}
+      {Array.from({ length: maxSeats }, (_, seat) => {
+        const pos = getSeatPosition(seat, maxSeats, anchorSeat, xRadius, yRadius);
+        const player = playerBySeat.get(seat);
+        const isMe = player?.id === myId;
+        const reveal = revealBySeat.get(seat);
+        const inHand = hand !== null && player !== undefined && hand.eligibleSeatNumbers.includes(seat);
         const holeCards = isMe ? privateState?.holeCards ?? [] : reveal?.cards ?? [];
-        const faceDownCount = !isMe && inHand && !reveal ? holeCount : 0;
-        const isWinner = hand?.phase === "complete" && player.seat !== null && hand.winningSeats.includes(player.seat);
+        const faceDownCount = player && !isMe && inHand && !reveal ? holeCount : 0;
+        const isWinner = hand?.phase === "complete" && player !== undefined && hand.winningSeats.includes(seat);
         return (
           <div
-            key={player.id}
+            key={seat}
             style={{
               position: "absolute",
               left: `${pos.x}%`,
               top: `${pos.y}%`,
               transform: `translate(-50%, -50%) scale(${isMe ? 1 : opponentScale})`,
-              zIndex: isMe ? 5 : 2,
+              zIndex: isMe ? 5 : player ? 2 : 1,
             }}
           >
-            <Seat
-              player={player}
-              hand={hand}
-              isMe={isMe}
-              holeCards={holeCards}
-              faceDownCount={faceDownCount}
-              isWinner={Boolean(isWinner)}
-              handName={hand?.phase === "complete" ? reveal?.handName : undefined}
-            />
+            {player ? (
+              <Seat
+                player={player}
+                hand={hand}
+                isMe={isMe}
+                holeCards={holeCards}
+                faceDownCount={faceDownCount}
+                isWinner={Boolean(isWinner)}
+                handName={hand?.phase === "complete" ? reveal?.handName : undefined}
+              />
+            ) : (
+              <EmptySeat seat={seat} canSit={canChooseSeat} isMove={mySeat !== null} onSit={() => onSit(seat)} />
+            )}
           </div>
         );
       })}

@@ -5,6 +5,55 @@ import { chips, upDownColor, upDownLabel } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { PokerCard } from "./Card";
 
+/**
+ * An open seat on the felt. Clickable when the viewer is allowed to take it
+ * (lobby or between hands); otherwise a quiet placeholder so the ring stays
+ * visually complete. Sized to match an occupied name plate so nothing shifts
+ * when a player sits down.
+ */
+export function EmptySeat({
+  seat,
+  canSit,
+  isMove,
+  onSit,
+}: {
+  seat: number;
+  canSit: boolean;
+  isMove: boolean;
+  onSit: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={canSit ? "seat-open" : undefined}
+      disabled={!canSit}
+      onClick={canSit ? onSit : undefined}
+      aria-label={canSit ? `${isMove ? "Move to" : "Sit in"} seat ${seat + 1}` : `Seat ${seat + 1} open`}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        minWidth: 92,
+        maxWidth: 132,
+        height: 58,
+        borderRadius: 10,
+        border: `1.5px dashed ${canSit ? "rgba(201,165,74,0.55)" : "rgba(255,255,255,0.13)"}`,
+        background: canSit ? "rgba(201,165,74,0.08)" : "rgba(0,0,0,0.22)",
+        color: canSit ? D.goldBright : D.muted,
+        cursor: canSit ? "pointer" : "default",
+        transition: "background 0.15s, border-color 0.15s, transform 0.1s",
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: D.muted }}>
+        Seat {seat + 1}
+      </span>
+      <span style={{ fontSize: 12, fontWeight: 800 }}>{canSit ? (isMove ? "Move here" : "Sit here") : "Open"}</span>
+    </button>
+  );
+}
+
 function RoleBadge({ label, bg }: { label: string; bg: string }) {
   return (
     <span

@@ -78,3 +78,20 @@ input[type="range"]::-moz-range-thumb {
   background: linear-gradient(90deg, #f0d278, #c9a54a);
   animation: nextCountdown 4.2s linear forwards;
 }
+
+/* Header secondary info (seated count, blinds) folds away on narrow headers
+   so the room name + code + action buttons never collide. */
+@media (max-width: 680px) {
+  .header-meta {
+    display: none !important;
+  }
+}
+
+/* Open (click-to-sit) seat on the felt. */
+.seat-open:hover {
+  background: rgba(201, 165, 74, 0.18) !important;
+  border-color: rgba(201, 165, 74, 0.9) !important;
+}
+.seat-open:active {
+  transform: scale(0.96);
+}

@@ -11,7 +11,7 @@ server-authoritative NL Hold'em engine.
 ## Features
 
 - **Landing → lobby → table** flow with 6-character room codes / invite links.
-- **Lobby**: seat selection, ready status, stacks, buy-ins, up/down, host badge,
+- **Lobby**: click-to-sit seating on the felt, ready status, stacks, buy-ins, up/down, host badge,
   and an append-only audit log. Host configures blinds, ante, buy-in, starting
   stack, min/max seats, straddle, the per-turn action timer, the global 7-2
   bounty, custom-mode rules, chip mode (strict defers chip changes mid-hand /

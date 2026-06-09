@@ -5,7 +5,6 @@ import { useGameSession } from "@/contexts/GameSession";
 import { D, feltSurface } from "@/lib/theme";
 import { PokerTable } from "./PokerTable";
 import { ActionZone, type PreAction } from "./ActionZone";
-import { FeltTicker } from "./FeltTicker";
 import { LobbyControls } from "./LobbyControls";
 import { SidePanel } from "./SidePanel";
 import { RoomHeader } from "./RoomHeader";
@@ -21,7 +20,7 @@ const PRE_ACTION_FIRE_MS = 450;
  * The redesigned play area. A slim header, then a row of [ felt | command rail ].
  * Everything the player DOES lives in the rail — a height-locked Action Zone on
  * top and the info tabs below — so the felt never resizes and content never
- * shifts up/down. A slim ticker fills the space freed at the bottom of the felt.
+ * shifts up/down. The felt column is board-only; blinds live in the header.
  */
 export function RoomView() {
   const { code, myId, publicState, privateState, send, leave, notice } = useGameSession();
@@ -104,10 +103,10 @@ export function RoomView() {
       <RoomHeader publicState={publicState} code={code} isHost={isHost} onLeave={leave} onEnd={() => send({ type: "endSession" })} />
 
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: wide ? "row" : "column" }}>
-        {/* Felt column — isolated board + slim ticker, never resizes. */}
-        <div style={wide ? { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" } : { flex: "0 0 46vh", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {/* Felt column — isolated board, never resizes. */}
+        <div style={wide ? { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" } : { flex: "0 0 52vh", minHeight: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-            <PokerTable publicState={publicState} privateState={privateState} myId={myId} />
+            <PokerTable publicState={publicState} privateState={privateState} myId={myId} onSit={(seat) => send({ type: "sit", seat })} />
             {(notice ?? flash) && (
               <div
                 role="status"
@@ -133,7 +132,6 @@ export function RoomView() {
               </div>
             )}
           </div>
-          <FeltTicker publicState={publicState} />
         </div>
 
         {/* Command rail — all interaction lives here. */}

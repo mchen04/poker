@@ -179,13 +179,12 @@ function ModesTab({ publicState, send }: { publicState: RoomPublicState; send: (
 }
 
 function LogTab({ publicState }: { publicState: RoomPublicState }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [publicState.audit.length]);
+  // Newest first: the latest action stays pinned at the top where the eye lands,
+  // so the live log never needs scrolling to follow the action.
+  const entries = publicState.audit.slice(-120).reverse();
   return (
-    <div ref={ref} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11 }}>
-      {publicState.audit.slice(-120).map((entry) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11 }}>
+      {entries.map((entry) => (
         <div key={entry.id} style={{ color: D.sub, lineHeight: 1.3 }}>
           <span style={{ color: D.muted, fontWeight: 700 }}>[{entry.type}]</span> {entry.message}
         </div>

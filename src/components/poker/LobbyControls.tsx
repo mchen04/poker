@@ -5,7 +5,7 @@ import { canStartGame, chips, seatedReadyCount } from "@/lib/utils";
 import { D } from "@/lib/theme";
 import { shadows } from "@/lib/tokens";
 
-/** Pre-game controls: seat selection, ready toggle, and host start. */
+/** Pre-game controls: ready toggle and host start. Seating happens on the felt. */
 export function LobbyControls({
   publicState,
   myId,
@@ -17,48 +17,17 @@ export function LobbyControls({
 }) {
   const me = publicState.players.find((p) => p.id === myId);
   const isHost = me?.isHost ?? false;
+  const seated = me?.seat !== null && me?.seat !== undefined;
   const seatedReady = seatedReadyCount(publicState);
   const canStart = canStartGame(publicState, isHost);
-  const playerBySeat = new Map(publicState.players.filter((p) => p.seat !== null).map((p) => [p.seat as number, p]));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 14, background: D.panelBold, border: `1px solid ${D.panelBorder}` }}>
       <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.14em", textTransform: "uppercase", color: D.gold }}>
-        Take a seat · {publicState.settings.smallBlind}/{publicState.settings.bigBlind} blinds · {chips(publicState.settings.startingStack)} stack
+        Lobby · {publicState.settings.smallBlind}/{publicState.settings.bigBlind} blinds · {chips(publicState.settings.startingStack)} stack
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 6 }}>
-        {Array.from({ length: publicState.settings.maxSeats }, (_, seat) => {
-          const occupant = playerBySeat.get(seat);
-          const mine = occupant?.id === myId;
-          return (
-            <button
-              key={seat}
-              disabled={Boolean(occupant) && !mine}
-              onClick={() => !occupant && send({ type: "sit", seat })}
-              style={{
-                padding: "8px 6px",
-                borderRadius: 9,
-                fontSize: 11,
-                fontWeight: 800,
-                textAlign: "center",
-                background: mine ? "rgba(201,165,74,0.22)" : occupant ? "rgba(0,0,0,0.35)" : "rgba(47,184,115,0.14)",
-                border: `1px solid ${mine ? D.gold : occupant ? "rgba(255,255,255,0.1)" : "rgba(47,184,115,0.4)"}`,
-                color: occupant ? D.goldBright : D.accent,
-                cursor: occupant && !mine ? "default" : "pointer",
-              }}
-            >
-              <div style={{ fontSize: 9, color: D.muted }}>Seat {seat + 1}</div>
-              {occupant ? (
-                <>
-                  <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{occupant.name}{mine ? " (you)" : ""}</div>
-                  <div style={{ fontSize: 10, color: "#fff" }}>{chips(occupant.stack)}</div>
-                </>
-              ) : (
-                <div>Sit here</div>
-              )}
-            </button>
-          );
-        })}
+      <div style={{ fontSize: 12, color: seated ? D.sub : D.goldBright, fontWeight: seated ? 600 : 800, lineHeight: 1.4 }}>
+        {seated ? "You're seated. Mark ready when you want to play — you can change seats until the first hand deals." : "👉 Click an open seat at the table to sit down."}
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

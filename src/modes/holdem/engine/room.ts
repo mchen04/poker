@@ -100,6 +100,7 @@ function publicPlayer(room: RoomInternal, player: PlayerInternal): PlayerPublic 
     connected: player.socketIds.size > 0,
     muted: player.muted,
     banned: player.banned,
+    spectator: player.spectator,
     forcedSitOut: player.forcedSitOut,
     seat: player.seat,
     stack: player.stack,
