@@ -9,27 +9,26 @@ import { D, fieldStyle } from "@/lib/theme";
 const ARM_CONFIRM_MS = 4000;
 
 /**
- * The poker action rail. Fold / Check / Call / All-in quick
- * buttons plus a bet/raise sizer with a typed exact-amount input, a slider, and
- * preset sizes (⅓, ½, ⅔, pot, 3×BB, min, max). The slider/input track the
- * TARGET total committed this street; bet sends the increment, raise sends the
- * target (matching the engine). Illegal amounts can never be submitted — the
- * value is clamped and buttons are disabled by the server-computed LegalActions.
- * Hotkeys: F fold · C check/call · B/R bet/raise · A all-in. Large commitments
- * (≥ threshold of stack, or all-in) require a confirm click.
+ * The poker action controls, laid out for the right-rail Action Zone: a bet/raise
+ * sizer (typed exact-amount input, slider, and preset sizes) on top, with the
+ * Fold / Check-or-Call / Raise / All-in quick buttons pinned to the bottom of the
+ * (height-locked) zone so they never move between turns. The slider/input track
+ * the TARGET total committed this street; bet sends the increment, raise sends the
+ * target (matching the engine). Illegal amounts can never be submitted — the value
+ * is clamped and buttons are disabled by the server-computed LegalActions. Hotkeys:
+ * F fold · C check/call · B/R bet/raise · A all-in. Large commitments (≥ threshold
+ * of stack, or all-in) require a confirm click.
  */
 export function BettingControl({
   legal,
   hand,
   me,
-  bigBlind,
   largeBetThresholdPct,
   onAct,
 }: {
   legal: LegalActions;
   hand: HandPublic;
   me: PlayerPublic;
-  bigBlind: number;
   largeBetThresholdPct: number;
   onAct: (action: PlayerAction, amount?: number) => void;
 }) {
@@ -48,9 +47,12 @@ export function BettingControl({
   }, [hand.actionNonce, hand.phase, minTarget, maxTarget]);
 
   // Clear any pending confirm timer on unmount (the turn can end while armed).
-  useEffect(() => () => {
-    if (armTimer.current) clearTimeout(armTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (armTimer.current) clearTimeout(armTimer.current);
+    },
+    []
+  );
 
   const commitChips = target - me.currentBet;
   const isLargeSize = canSize && commitChips >= (me.stack * largeBetThresholdPct) / 100;
@@ -97,11 +99,9 @@ export function BettingControl({
   const presets: Array<{ label: string; value: number }> = canSize
     ? [
         { label: "Min", value: minTarget },
-        { label: "⅓", value: hand.currentBet + (legal.potSize + legal.callAmount) / 3 },
         { label: "½", value: hand.currentBet + (legal.potSize + legal.callAmount) / 2 },
         { label: "⅔", value: hand.currentBet + ((legal.potSize + legal.callAmount) * 2) / 3 },
         { label: "Pot", value: hand.currentBet + legal.potSize + legal.callAmount },
-        { label: "3×BB", value: 3 * bigBlind },
         { label: "Max", value: maxTarget },
       ]
     : [];
@@ -110,34 +110,10 @@ export function BettingControl({
   const fillPct = maxTarget > minTarget ? Math.max(0, Math.min(100, ((target - minTarget) / (maxTarget - minTarget)) * 100)) : 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {/* Quick action row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
-        <ActionButton label="Fold" hint="F" disabled={!legal.canFold} tone="danger" onClick={() => onAct("fold")} />
-        {legal.canCheck ? (
-          <ActionButton label="Check" hint="C" disabled={false} tone="neutral" onClick={() => onAct("check")} />
-        ) : (
-          <ActionButton label={`Call ${chips(legal.callAmount)}`} hint="C" disabled={!legal.canCall} tone="call" onClick={() => onAct("call")} />
-        )}
-        <ActionButton
-          label={armed === "allin" ? "Confirm all-in" : `All-in ${chips(legal.allInAmount)}`}
-          hint="A"
-          disabled={legal.allInAmount <= 0}
-          tone={armed === "allin" ? "confirm" : "neutral"}
-          onClick={() => arm("allin", submitAllIn, true)}
-        />
-        <ActionButton
-          label={armed === "size" ? "Confirm" : sizeLabel}
-          hint="B"
-          disabled={!canSize}
-          tone={armed === "size" ? "confirm" : "gold"}
-          onClick={() => arm("size", submitSize, isLargeSize)}
-        />
-      </div>
-
-      {/* Sizer */}
-      {canSize && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(0,0,0,0.3)", borderRadius: 10, padding: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
+      {/* Sizer (or a placeholder that holds the space when only call/fold is legal). */}
+      {canSize ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 7, background: "rgba(0,0,0,0.32)", borderRadius: 11, padding: 9 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 10, fontWeight: 800, color: D.sub, textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{sizeLabel}</span>
             <input
@@ -148,17 +124,7 @@ export function BettingControl({
               onChange={(e) => setTarget(e.target.value === "" ? minTarget : Number(e.target.value))}
               onBlur={() => setTarget((t) => clamp(Number.isFinite(t) ? t : minTarget, minTarget, maxTarget))}
               aria-label="Bet amount"
-              style={{
-                ...fieldStyle,
-                flex: 1,
-                minWidth: 0,
-                borderRadius: 8,
-                fontWeight: 900,
-                fontSize: 18,
-                textAlign: "center",
-                padding: "4px 6px",
-                outline: "none",
-              }}
+              style={{ ...fieldStyle, flex: 1, minWidth: 0, borderRadius: 8, fontWeight: 900, fontSize: 20, textAlign: "center", padding: "5px 6px", outline: "none" }}
             />
           </div>
           <input
@@ -170,30 +136,51 @@ export function BettingControl({
             aria-label="Bet slider"
             style={{ width: "100%", accentColor: D.gold, background: `linear-gradient(to right, ${D.gold} ${fillPct}%, rgba(255,255,255,0.15) ${fillPct}%)` }}
           />
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 5 }}>
             {presets.map((preset) => (
               <button
                 key={preset.label}
                 onClick={() => setTarget(clamp(Math.round(preset.value), minTarget, maxTarget))}
-                style={{
-                  flex: "1 1 0",
-                  minWidth: 38,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  padding: "4px 0",
-                  borderRadius: 7,
-                  background: "rgba(255,255,255,0.07)",
-                  border: `1px solid ${D.panelBorder}`,
-                  color: D.text,
-                  cursor: "pointer",
-                }}
+                style={{ flex: "1 1 0", minWidth: 0, fontSize: 11.5, fontWeight: 800, padding: "5px 0", borderRadius: 7, background: "rgba(255,255,255,0.07)", border: `1px solid ${D.panelBorder}`, color: D.text, cursor: "pointer" }}
               >
                 {preset.label}
               </button>
             ))}
           </div>
         </div>
+      ) : (
+        <div style={{ background: "rgba(0,0,0,0.32)", borderRadius: 11, padding: "14px 10px", textAlign: "center", color: D.sub, fontSize: 12, fontWeight: 700 }}>
+          No raise available — you can only call or fold here.
+        </div>
       )}
+
+      {/* Quick actions — pinned to the bottom of the zone so they never shift. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: "auto" }}>
+        <ActionButton label="Fold" hint="F" disabled={!legal.canFold} tone="danger" onClick={() => onAct("fold")} />
+        {legal.canCheck ? (
+          <ActionButton label="Check" hint="C" disabled={false} tone="neutral" onClick={() => onAct("check")} />
+        ) : (
+          <ActionButton label={`Call ${chips(legal.callAmount)}`} hint="C" disabled={!legal.canCall} tone="call" onClick={() => onAct("call")} />
+        )}
+        <ActionButton
+          label={armed === "size" ? "Confirm" : legal.canRaise ? "Raise" : "Bet"}
+          hint="B"
+          disabled={!canSize}
+          tone={armed === "size" ? "confirm" : "gold"}
+          onClick={() => arm("size", submitSize, isLargeSize)}
+        />
+        <ActionButton
+          label={armed === "allin" ? "Sure?" : "All-in"}
+          hint="A"
+          disabled={legal.allInAmount <= 0}
+          tone={armed === "allin" ? "confirm" : "neutral"}
+          onClick={() => arm("allin", submitAllIn, true)}
+        />
+      </div>
+
+      <div style={{ textAlign: "center", fontSize: 9.5, color: D.muted, fontWeight: 700, letterSpacing: "0.04em" }}>
+        Hotkeys — F fold · C check/call · B bet/raise · A all-in
+      </div>
     </div>
   );
 }
@@ -229,10 +216,10 @@ function ActionButton({
       data-action={hint}
       style={{
         position: "relative",
-        padding: "12px 6px",
-        borderRadius: 10,
+        padding: "14px 6px",
+        borderRadius: 11,
         fontWeight: 900,
-        fontSize: 13,
+        fontSize: 13.5,
         background: disabled ? "rgba(255,255,255,0.05)" : bg,
         color: disabled ? "rgba(255,255,255,0.3)" : color,
         border: tone === "neutral" || disabled ? `1px solid ${D.panelBorder}` : "none",
@@ -241,9 +228,11 @@ function ActionButton({
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
+        lineHeight: 1.1,
       }}
     >
       {label}
+      {hint && !disabled && <span style={{ position: "absolute", top: 3, right: 5, fontSize: 8.5, fontWeight: 800, opacity: 0.55 }}>{hint}</span>}
     </button>
   );
 }

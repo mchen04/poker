@@ -9,22 +9,23 @@ import { ChromeButton } from "./ChromeButton";
 /** How long the "Copied!" invite confirmation shows before reverting. */
 const COPIED_RESET_MS = 1500;
 
+/**
+ * Slim, single-row title bar. Kept intentionally minimal — room identity on the
+ * left, the few room-level actions on the right — so the play area below gets the
+ * maximum vertical real estate and nothing here ever wraps or shifts.
+ */
 export function RoomHeader({
   publicState,
   code,
   isHost,
   onLeave,
   onEnd,
-  onTogglePanel,
-  showPanelToggle,
 }: {
   publicState: RoomPublicState;
   code: string;
   isHost: boolean;
   onLeave: () => void;
   onEnd: () => void;
-  onTogglePanel: () => void;
-  showPanelToggle: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [endArmed, setEndArmed] = useState(false);
@@ -33,10 +34,13 @@ export function RoomHeader({
   const seated = publicState.players.filter((p) => p.seat !== null).length;
 
   // Clear pending confirm/copied timers on unmount (avoids setState-after-unmount).
-  useEffect(() => () => {
-    if (endTimer.current) clearTimeout(endTimer.current);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (endTimer.current) clearTimeout(endTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    []
+  );
 
   function handleEnd() {
     if (endArmed) {
@@ -69,27 +73,24 @@ export function RoomHeader({
         alignItems: "center",
         justifyContent: "space-between",
         gap: 8,
-        padding: "8px 12px",
+        padding: "7px 14px",
         background: D.panelDark,
         borderBottom: "1px solid rgba(201,165,74,0.2)",
-        flexWrap: "wrap",
+        flexShrink: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <span style={{ fontFamily: D.serif, fontWeight: 900, fontSize: 18, color: D.goldBright }}>{publicState.settings.roomName}</span>
-        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.15em", color: D.gold }}>{code}</span>
-        <span style={{ fontSize: 11, color: D.sub }}>{seated} seated · {publicState.lifecycle}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 11, minWidth: 0 }}>
+        <span style={{ fontFamily: D.serif, fontWeight: 900, fontSize: 18, color: D.goldBright, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{publicState.settings.roomName}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.15em", color: D.gold, flexShrink: 0 }}>{code}</span>
+        <span style={{ fontSize: 11, color: D.sub, whiteSpace: "nowrap", flexShrink: 0 }}>
+          {seated} seated · {publicState.lifecycle}
+        </span>
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <HeaderBtn label={copied ? "Copied!" : "Invite"} onClick={copyInvite} />
-        {isHost && <HeaderBtn label={endArmed ? "Confirm end?" : "End & export"} tone={endArmed ? "danger" : undefined} onClick={handleEnd} />}
-        <HeaderBtn label="Leave" tone="danger" onClick={onLeave} />
-        {showPanelToggle && <HeaderBtn label="☰" onClick={onTogglePanel} />}
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <ChromeButton label={copied ? "Copied!" : "Invite"} onClick={copyInvite} size="md" />
+        {isHost && <ChromeButton label={endArmed ? "Confirm end?" : "End & export"} tone={endArmed ? "danger" : undefined} onClick={handleEnd} size="md" />}
+        <ChromeButton label="Leave" tone="danger" onClick={onLeave} size="md" />
       </div>
     </header>
   );
-}
-
-function HeaderBtn({ label, onClick, tone }: { label: string; onClick: () => void; tone?: "danger" }) {
-  return <ChromeButton label={label} onClick={onClick} tone={tone} size="md" />;
 }

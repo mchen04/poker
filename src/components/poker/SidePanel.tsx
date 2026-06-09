@@ -26,8 +26,8 @@ export function SidePanel({
   const canEditSettings = !(publicState.hand && publicState.hand.phase !== "complete") && publicState.lifecycle !== "ended";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: D.panelDark, borderLeft: "1px solid rgba(201,165,74,0.2)" }}>
-      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
         {TABS.map((t) => (
           <button
             key={t}

@@ -27,3 +27,54 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* Bet/raise slider — gold knob on a thin track (rail BettingControl). */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f5e6b8, #c9a54a);
+  border: 2px solid #78350f;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f5e6b8, #c9a54a);
+  border: 2px solid #78350f;
+  cursor: pointer;
+}
+
+/* Between-hands "next deal" countdown bar (ActionZone). */
+@keyframes nextCountdown {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+.next-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.next-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f0d278, #c9a54a);
+  animation: nextCountdown 4.2s linear forwards;
+}
