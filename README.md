@@ -72,6 +72,20 @@ npm run build       # next build
 npm run smoke       # WebSocket transport smoke test (needs `npm run party:dev` running)
 ```
 
+## Deploy
+
+The game server (PartyKit) and the frontend (Next.js) ship separately:
+
+```bash
+npx partykit deploy   # game server -> feltline-poker.<user>.partykit.dev
+vercel --prod         # Next.js frontend (this repo includes vercel.json: framework=nextjs)
+```
+
+Set `NEXT_PUBLIC_PARTYKIT_HOST` in the Vercel project's environment to the
+deployed PartyKit host (e.g. `feltline-poker.<user>.partykit.dev`); the client
+falls back to `localhost:1999` for local dev. If you want room links to be
+publicly shareable, turn off the project's Vercel **Deployment Protection**.
+
 ## Architecture
 
 - `party/index.ts` — PartyKit server (one room per Durable Object): validates
