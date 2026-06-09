@@ -1,19 +1,18 @@
 "use client";
 
 import type { RoomPublicState } from "@/modes/holdem/shared/types";
-import { variantLabel } from "@/modes/holdem/shared/modes";
 import { D } from "@/lib/theme";
 
 /**
  * Slim status bar pinned to the bottom of the felt column — it fills the space
- * freed by moving the action controls into the rail. Left: blinds · hand # ·
- * variant. Right: the most recent table actions (newest first, fading out), read
- * straight off the public audit log so nothing here can shift the felt above it.
+ * freed by moving the action controls into the rail. Left: blinds (the one piece
+ * of table state not shown on the board). Right: the most recent table actions
+ * (newest first, fading out), read straight off the public audit log so nothing
+ * here can shift the felt above it. Hand #, pot, and variant deliberately live on
+ * the central board only, so live hand details never bleed into this footer strip.
  */
 export function FeltTicker({ publicState }: { publicState: RoomPublicState }) {
   const s = publicState.settings;
-  const hand = publicState.hand;
-  const variant = hand ? variantLabel(hand.variant) : "—";
 
   const recent = publicState.audit
     .filter((e) => e.type.startsWith("action.") || e.type === "blind.posted")
@@ -40,10 +39,12 @@ export function FeltTicker({ publicState }: { publicState: RoomPublicState }) {
         <span style={{ color: D.gold, fontWeight: 800 }}>
           Blinds {s.smallBlind}/{s.bigBlind}
         </span>
-        <span style={{ opacity: 0.4 }}>·</span>
-        <span>{hand ? `Hand #${hand.number}` : "Pre-game"}</span>
-        <span style={{ opacity: 0.4 }}>·</span>
-        <span>{variant}</span>
+        {s.ante > 0 && (
+          <>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span>Ante {s.ante}</span>
+          </>
+        )}
       </div>
       <div style={{ display: "flex", gap: 12, alignItems: "center", overflow: "hidden", minWidth: 0, justifyContent: "flex-end" }}>
         {recent.length === 0 ? (

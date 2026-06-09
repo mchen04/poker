@@ -43,6 +43,7 @@ export function PokerTable({
     playerCount: Math.max(seated.length, 1),
     isMobile,
     isLandscape,
+    width: dims.w,
   });
   const holeCount = hand?.variant === "omaha4" ? 4 : 2;
   const revealBySeat = new Map((hand?.revealedHands ?? []).map((r) => [r.seat, r]));

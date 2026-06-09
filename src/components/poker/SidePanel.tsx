@@ -9,7 +9,9 @@ import { HostSettings } from "./HostSettings";
 import { ChromeButton } from "./ChromeButton";
 
 type Tab = "players" | "modes" | "log" | "chat" | "settings";
-const TABS: Tab[] = ["players", "modes", "log", "chat", "settings"];
+// Ordered by in-game utility: the live action log is the most-watched surface, so
+// it leads and is the default tab; setup-time concerns (modes, settings) trail.
+const TABS: Tab[] = ["log", "players", "chat", "modes", "settings"];
 
 export function SidePanel({
   publicState,
@@ -20,7 +22,7 @@ export function SidePanel({
   myId: string | null;
   send: (cmd: ClientCommand) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("players");
+  const [tab, setTab] = useState<Tab>("log");
   const me = publicState.players.find((p) => p.id === myId);
   const isHost = me?.isHost ?? false;
   const canEditSettings = !(publicState.hand && publicState.hand.phase !== "complete") && publicState.lifecycle !== "ended";
@@ -34,16 +36,18 @@ export function SidePanel({
             onClick={() => setTab(t)}
             style={{
               flex: 1,
-              padding: "8px 2px",
+              padding: "9px 2px",
               fontSize: 10,
               fontWeight: 800,
-              letterSpacing: "0.06em",
+              letterSpacing: "0.05em",
               textTransform: "uppercase",
+              whiteSpace: "nowrap",
               background: tab === t ? "rgba(201,165,74,0.14)" : "transparent",
               color: tab === t ? D.goldBright : D.sub,
               border: "none",
               borderBottom: tab === t ? `2px solid ${D.gold}` : "2px solid transparent",
               cursor: "pointer",
+              transition: "color 0.15s, background 0.15s",
             }}
           >
             {t}
@@ -205,7 +209,7 @@ function ChatTab({ publicState, myId, send }: { publicState: RoomPublicState; my
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, gap: 6 }}>
       <div ref={ref} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
-        {publicState.chat.map((entry) => (
+        {publicState.chat.slice(-120).map((entry) => (
           <div key={entry.id} style={{ lineHeight: 1.3 }}>
             <span style={{ fontWeight: 800, color: entry.system ? D.muted : entry.playerId === myId ? D.goldBright : D.sub }}>{entry.playerName}: </span>
             <span style={{ color: entry.system ? D.muted : "#e8eee9", fontStyle: entry.system ? "italic" : "normal" }}>{entry.message}</span>

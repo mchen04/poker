@@ -20,14 +20,28 @@ export function computeTableLayout({
   playerCount,
   isMobile,
   isLandscape,
+  width = 1200,
 }: {
   playerCount: number;
   isMobile: boolean;
   isLandscape: boolean;
+  /** Measured felt width in px — keeps edge seat pods from clipping on narrow felts. */
+  width?: number;
 }): { xRadius: number; yRadius: number; opponentScale: number } {
   const n = playerCount;
-  const xRadius = isMobile ? (isLandscape ? (n >= 5 ? 29 : 32) : n >= 5 ? 40 : 43) : 46;
-  const yRadius = isMobile ? (isLandscape ? (n >= 5 ? 32 : 36) : n >= 5 ? 23 : 28) : 43;
-  const opponentScale = isMobile ? Math.max(0.6, 1 - Math.max(0, n - 4) * 0.04) : 1;
+  if (isMobile) {
+    const xRadius = isLandscape ? (n >= 5 ? 29 : 32) : n >= 5 ? 40 : 43;
+    const yRadius = isLandscape ? (n >= 5 ? 32 : 36) : n >= 5 ? 23 : 28;
+    const opponentScale = Math.max(0.6, 1 - Math.max(0, n - 4) * 0.04);
+    return { xRadius, yRadius, opponentScale };
+  }
+  // A seat pod is up to ~132px wide, so its center must stay ~72px in from either
+  // edge or it clips off-screen. On a wide desktop felt that's a small percentage,
+  // so we keep the roomy 46 radius; on a narrow felt (tablet, split-screen) we pull
+  // the edge seats inward proportionally instead of letting them spill past the edge.
+  const marginPct = (72 / Math.max(width, 1)) * 100;
+  const xRadius = Math.max(36, Math.min(46, 50 - marginPct));
+  const yRadius = 43;
+  const opponentScale = width < 820 ? 0.9 : 1;
   return { xRadius, yRadius, opponentScale };
 }
