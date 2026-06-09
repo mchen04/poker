@@ -103,12 +103,6 @@ export function RoomView() {
     <div style={{ ...feltSurface, height: "100dvh", display: "flex", flexDirection: "column", color: "#fff", overflow: "hidden" }}>
       <RoomHeader publicState={publicState} code={code} isHost={isHost} onLeave={leave} onEnd={() => send({ type: "endSession" })} />
 
-      {publicState.queuedMode && (
-        <div style={{ padding: "5px 12px", background: "rgba(201,165,74,0.16)", borderBottom: `1px solid ${D.gold}`, color: D.goldBright, fontWeight: 800, fontSize: 12, textAlign: "center", flexShrink: 0 }}>
-          Next hand: {publicState.queuedMode.label} — queued by {publicState.queuedMode.queuedByName}
-        </div>
-      )}
-
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: wide ? "row" : "column" }}>
         {/* Felt column — isolated board + slim ticker, never resizes. */}
         <div style={wide ? { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" } : { flex: "0 0 46vh", minHeight: 0, display: "flex", flexDirection: "column" }}>
